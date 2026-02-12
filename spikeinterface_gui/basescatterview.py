@@ -592,8 +592,17 @@ class BaseScatterView(ViewBase):
     def _panel_update_selected_spikes(self):
         # handle selected spikes
         selected_spike_indices = self.controller.get_indices_spike_selected()
-        selected_spike_indices = np.intersect1d(selected_spike_indices, self.plotted_inds)
-        if len(selected_spike_indices) > 0:
+        if len(selected_spike_indices) == 0:
+            self.scatter_source.selected.indices = []
+            return
+        elif len(selected_spike_indices) == 1:
+            selected_segment = self.controller.spikes[selected_spike_indices[0]]['segment_index']
+            segment_index = self.controller.get_time()[1]
+            if selected_segment != segment_index:
+                self.segment_selector.value = f"Segment {selected_segment}"
+                self._panel_change_segment(None)
+        else:
+            selected_spike_indices = np.intersect1d(selected_spike_indices, self.plotted_inds)
             # map absolute indices to visible spikes
             segment_index = self.controller.get_time()[1]
             sl = self.controller.segment_slices[segment_index]
@@ -607,21 +616,8 @@ class BaseScatterView(ViewBase):
             if self.settings["auto_decimate"] and len(selected_indices) > 0:
                 selected_indices, = np.nonzero(np.isin(self.plotted_inds, selected_spike_indices))
             self.scatter_source.selected.indices = list(selected_indices)
-        else:
-            self.scatter_source.selected.indices = []
 
     def _panel_on_spike_selection_changed(self):
-        # set selection in scatter plot
-        selected_indices = self.controller.get_indices_spike_selected()
-        if len(selected_indices) == 0:
-            self.scatter_source.selected.indices = []
-            return
-        elif len(selected_indices) == 1:
-            selected_segment = self.controller.spikes[selected_indices[0]]['segment_index']
-            segment_index = self.controller.get_time()[1]
-            if selected_segment != segment_index:
-                self.segment_selector.value = f"Segment {selected_segment}"
-                self._panel_change_segment(None)
         # update selected spikes
         self._panel_update_selected_spikes()
 
