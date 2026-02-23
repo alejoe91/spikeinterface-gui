@@ -61,17 +61,19 @@ class CurationView(ViewBase):
     ## Qt
     def _qt_make_layout(self):
         from .myqt import QT
-        import pyqtgraph as pg
 
         self.merge_info = {}
         self.layout = QT.QVBoxLayout()
 
         tb = self.qt_widget.view_toolbar
-        if self.controller.curation_can_be_saved():
+        if self.controller.curation_callback is not None:
+            but = QT.QPushButton("Save curation")
+            tb.addWidget(but)
+            but.clicked.connect(self.controller.save_curation_callback)
+        elif self.controller.curation_can_be_saved():
             but = QT.QPushButton("Save in analyzer")
             tb.addWidget(but)
-            but.clicked.connect(self.save_in_analyzer)
-
+            but.clicked.connect(self.controller.save_curation_in_analyzer)
         but = QT.QPushButton("Export JSON")
         but.clicked.connect(self._qt_export_json)
         tb.addWidget(but)
@@ -275,9 +277,6 @@ class CurationView(ViewBase):
     def on_manual_curation_updated(self):
         self.refresh()
 
-    def save_in_analyzer(self):
-        self.controller.save_curation_in_analyzer()
-
     def _qt_export_json(self):
         from .myqt import QT
 
@@ -356,17 +355,22 @@ class CurationView(ViewBase):
         self.table_split.param.watch(self._panel_on_table_selection_changed, "selection")
 
         # Create buttons
-        buttons_row = []
-        self.save_button = None
-        if self.controller.curation_can_be_saved():
-            self.save_button = pn.widgets.Button(name="Save in analyzer", button_type="primary", height=30)
-            self.save_button.on_click(self._panel_save_in_analyzer)
-            buttons_row.append(self.save_button)
+        if self.controller.curation_callback is not None:
+            save_button_name = "Save curation"
+            save_button_callback = self._panel_save_curation_callback
+        else:
+            save_button_name = "Save in analyzer"
+            save_button_callback = self._panel_save_in_analyzer
+        save_button = pn.widgets.Button(
+            name=save_button_name,
+            button_type="primary",
+            height=30
+        )
+        save_button.on_click(save_button_callback)
 
-        self.download_button = pn.widgets.FileDownload(
+        download_button = pn.widgets.FileDownload(
             button_type="primary", filename="curation.json", callback=self._panel_generate_json, height=30
         )
-        buttons_row.append(self.download_button)
 
         restore_button = pn.widgets.Button(name="Restore", button_type="primary", height=30)
         restore_button.on_click(self._panel_restore_units)
@@ -378,8 +382,9 @@ class CurationView(ViewBase):
         remove_split.on_click(self._panel_unsplit)
 
         # Create layout
-        self.buttons_save = pn.Row(
-            *buttons_row,
+        buttons_save = pn.Row(
+            save_button,
+            download_button,
             sizing_mode="stretch_width",
         )
 
@@ -402,12 +407,13 @@ class CurationView(ViewBase):
         # Create main layout with proper sizing
         sections = pn.Row(self.table_delete, self.table_merge, self.table_split, sizing_mode="stretch_width")
         self.layout = pn.Column(
-            self.buttons_save, buttons_curate, sections, shortcuts_component, scroll=True, sizing_mode="stretch_both"
+            buttons_save, buttons_curate, sections, shortcuts_component, scroll=True, sizing_mode="stretch_both"
         )
 
-        self.iframe_detector = IFrameDetector()
-        self.iframe_detector.param.watch(self._panel_on_iframe_change, "in_iframe")
-        self.layout.append(self.iframe_detector)
+        # Add a hidden div to store the data
+        self.data_div = pn.pane.HTML("", width=0, height=0, margin=0, sizing_mode="fixed")
+        self.layout.append(self.data_div)
+
 
     def _panel_refresh(self):
         import pandas as pd
@@ -499,7 +505,11 @@ class CurationView(ViewBase):
         self.unsplit()
 
     def _panel_save_in_analyzer(self, event):
-        self.save_in_analyzer()
+        self.controller.save_curation_in_analyzer()
+        self.refresh()
+
+    def _panel_save_curation_callback(self, event):
+        self.controller.save_curation_callback()
         self.refresh()
 
     def _panel_generate_json(self):
@@ -515,93 +525,6 @@ class CurationView(ViewBase):
         self.refresh()
 
         return export_path
-
-    def _panel_submit_to_parent(self, event):        
-        """Send the curation data to the parent window"""
-        import time
-
-        # Get the curation data and convert it to a JSON string
-        curation_model = self.controller.construct_final_curation()
-        curation_data = curation_model.model_dump_json()
-        # Trigger the JavaScript function via the TextInput
-        # Update the value to trigger the jscallback
-        self.submit_trigger.value = curation_data + f"_{int(time.time() * 1000)}"
-
-        # Submitting to parent is a way to "save" the curation (the parent can handle it)
-        self.controller.current_curation_saved = True
-        self.ensure_no_message()
-        print(f"Curation data sent to parent app!")
-
-    def _panel_set_curation_data(self, event):
-        """
-        Handler for PostMessageListener.on_msg.
-
-        event.data is whatever the JS side passed to model.send_msg(...).
-        Expected shape:
-        {
-            "payload": {"type": "curation-data", "data": <curation_dict>},
-        }
-        """
-        msg = event.data
-        payload = (msg or {}).get("payload", {})
-        curation_data = payload.get("data", None)
-
-        if curation_data is None:
-            print("Received message without curation data:", msg)
-            return
-
-        # Optional: validate basic structure
-        if not isinstance(curation_data, dict):
-            print("Invalid curation_data type:", type(curation_data), curation_data)
-            return
-
-        self.controller.set_curation_data(curation_data)
-        self.refresh()
-
-    def _panel_on_iframe_change(self, event):
-        import panel as pn
-
-        in_iframe = event.new
-        print(f"CurationView detected iframe mode: {in_iframe}")
-        if in_iframe:
-            # Remove save in analyzer button and add submit to parent button
-            self.submit_button = pn.widgets.Button(name="Submit to parent", button_type="primary", height=30)
-            self.submit_button.on_click(self._panel_submit_to_parent)
-
-            self.buttons_save = pn.Row(
-                self.submit_button,
-                self.download_button,
-                sizing_mode="stretch_width",
-            )
-            self.layout[0] = self.buttons_save
-            
-            # Create objects to submit and listen
-            self.submit_trigger = pn.widgets.TextInput(value="", visible=False)
-            # Add JavaScript callback that triggers when the TextInput value changes
-            self.submit_trigger.jscallback(
-                value="""
-                // Extract just the JSON data (remove timestamp suffix)
-                const fullValue = cb_obj.value;
-                const lastUnderscore = fullValue.lastIndexOf('_');
-                const dataStr = lastUnderscore > 0 ? fullValue.substring(0, lastUnderscore) : fullValue;
-
-                if (dataStr && dataStr.length > 0) {
-                    try {
-                        const data = JSON.parse(dataStr);
-                        console.log('Sending data to parent:', data);
-                        parent.postMessage({
-                                type: 'panel-data',
-                                data: data
-                            },
-                        '*');
-                        console.log('Data sent successfully to parent window');
-                    } catch (error) {
-                        console.error('Error sending data to parent:', error);
-                    }
-                }
-                """
-            )
-            self.layout.append(self.submit_trigger)
 
     def _panel_get_delete_table_selection(self):
         selected_items = self.table_delete.selection
@@ -708,12 +631,12 @@ The curation view shows the current status of the curation process and allows th
 revert, and export the curation data.
 
 ### Controls
-- **save in analyzer**: Save the current curation state in the analyzer.
+- **save in analyzer**/**save data**: Save the current curation state in the analyzer. 
+  If a custom save callback is provided, it will be used instead.
 - **export/download JSON**: Export the current curation state to a JSON file.
 - **restore**: Restore the selected unit from the deleted units table.
 - **unmerge**: Unmerge the selected merges from the merged units table.
 - **unsplit**: Unsplit the selected split groups from the split units table.
-- **submit to parent**: Submit the current curation state to the parent window (for use in web applications).
 - **press 'ctrl+r'**: Restore the selected units from the deleted units table.
 - **press 'ctrl+u'**: Unmerge the selected merges from the merged units table.
 - **press 'ctrl+x'**: Unsplit the selected split groups from the split units table.
