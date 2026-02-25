@@ -461,7 +461,7 @@ class CurationView(ViewBase):
         self.layout.insert(0, alert_markdown)
 
     def _panel_ensure_no_message(self):
-        if self.layout[0].name == "curation_save_warning":
+        if self.layout[0].name == 'curation_save_warning':
             self.layout.pop(0)
 
     def _panel_update_unit_visibility(self, event):
