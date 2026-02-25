@@ -296,7 +296,7 @@ class CurationView(ViewBase):
         import pandas as pd
         import panel as pn
 
-        from .utils_panel import KeyboardShortcut, KeyboardShortcuts, SelectableTabulator, IFrameDetector
+        from .utils_panel import KeyboardShortcut, KeyboardShortcuts, SelectableTabulator
 
         pn.extension("tabulator")
 
@@ -319,6 +319,7 @@ class CurationView(ViewBase):
             sizing_mode="stretch_width",
             # SelectableTabulator functions
             parent_view=self,
+            on_selection_changed=self._panel_on_table_selection_changed,
             conditional_shortcut=self._conditional_refresh_delete,
             column_callbacks={"removed": self._panel_on_deleted_col},
         )
@@ -332,6 +333,7 @@ class CurationView(ViewBase):
             sizing_mode="stretch_width",
             # SelectableTabulator functions
             parent_view=self,
+            on_selection_changed=self._panel_on_table_selection_changed,
             conditional_shortcut=self._conditional_refresh_merge,
             column_callbacks={"merges": self._panel_on_merged_col},
         )
@@ -345,14 +347,10 @@ class CurationView(ViewBase):
             sizing_mode="stretch_width",
             # SelectableTabulator functions
             parent_view=self,
+            on_selection_changed=self._panel_on_table_selection_changed,
             conditional_shortcut=self._conditional_refresh_split,
             column_callbacks={"splits": self._panel_on_split_col},
         )
-
-        # Watch selection changes instead of calling from column callbacks
-        self.table_delete.param.watch(self._panel_on_table_selection_changed, "selection")
-        self.table_merge.param.watch(self._panel_on_table_selection_changed, "selection")
-        self.table_split.param.watch(self._panel_on_table_selection_changed, "selection")
 
         # Create buttons
         if self.controller.curation_callback is not None:
@@ -409,11 +407,6 @@ class CurationView(ViewBase):
         self.layout = pn.Column(
             buttons_save, buttons_curate, sections, shortcuts_component, scroll=True, sizing_mode="stretch_both"
         )
-
-        # Add a hidden div to store the data
-        self.data_div = pn.pane.HTML("", width=0, height=0, margin=0, sizing_mode="fixed")
-        self.layout.append(self.data_div)
-
 
     def _panel_refresh(self):
         import pandas as pd
@@ -526,6 +519,51 @@ class CurationView(ViewBase):
 
         return export_path
 
+<<<<<<< HEAD
+=======
+    def _panel_submit_to_parent(self, event):        
+        """Send the curation data to the parent window"""
+        import time
+
+        # Get the curation data and convert it to a JSON string
+        curation_model = self.controller.construct_final_curation()
+        curation_data = curation_model.model_dump_json()
+        # Trigger the JavaScript function via the TextInput
+        # Update the value to trigger the jscallback
+        self.submit_trigger.value = curation_data + f"_{int(time.time() * 1000)}"
+
+        # Submitting to parent is a way to "save" the curation (the parent can handle it)
+        self.controller.current_curation_saved = True
+        self.ensure_no_message()
+        print(f"Curation data sent to parent app!")
+
+    def _panel_set_curation_data(self, event):
+        """
+        Handler for PostMessageListener.on_msg.
+
+        event.data is whatever the JS side passed to model.send_msg(...).
+        Expected shape:
+        {
+            "payload": {"type": "curation-data", "data": <curation_dict>},
+        }
+        """
+        msg = event.data
+        payload = (msg or {}).get("payload", {})
+        curation_data = payload.get("data", None)
+
+        if curation_data is None:
+            print("Received message without curation data:", msg)
+            return
+
+        # Optional: validate basic structure
+        if not isinstance(curation_data, dict):
+            print("Invalid curation_data type:", type(curation_data), curation_data)
+            return
+
+        self.controller.set_curation_data(curation_data)
+        self.refresh()
+
+>>>>>>> panel-parallel
     def _panel_get_delete_table_selection(self):
         selected_items = self.table_delete.selection
         if len(selected_items) == 0:
@@ -569,7 +607,7 @@ class CurationView(ViewBase):
     def _panel_on_split_col(self, row):
         self.active_table = "split"
 
-    def _panel_on_table_selection_changed(self, event):
+    def _panel_on_table_selection_changed(self):
         """
         Unified handler for all table selection changes.
         Determines which table was changed and updates visibility accordingly.
@@ -640,17 +678,4 @@ revert, and export the curation data.
 - **press 'ctrl+r'**: Restore the selected units from the deleted units table.
 - **press 'ctrl+u'**: Unmerge the selected merges from the merged units table.
 - **press 'ctrl+x'**: Unsplit the selected split groups from the split units table.
-
-### Note
-When setting the `iframe_mode` setting to `True` using the `user_settings=dict(curation=dict(iframe_mode=True))`,
-the GUI is expected to be used inside an iframe. In this mode, the curation view will include a "Submit to parent" 
-button that, when clicked, will send the current curation data to the parent window.
-In this mode, bi-directional communication is established between the GUI and the parent window using the `postMessage`
-API. The GUI listens for incoming messages of this expected shape:
-
-```
-{
-    "payload": {"type": "curation-data", "data": <curation_dict>},
-}
-```
 """
