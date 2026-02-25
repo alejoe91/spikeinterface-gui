@@ -48,7 +48,8 @@ class Controller():
         disable_save_settings_button=False,
         external_data=None,
         curation_callback=None,
-        curation_callback_kwargs=None
+        curation_callback_kwargs=None,
+        user_main_settings=None,
     ):
         self.views = []
         skip_extensions = skip_extensions if skip_extensions is not None else []
@@ -79,6 +80,8 @@ class Controller():
         t0 = time.perf_counter()
 
         self.main_settings = _default_main_settings.copy()
+        if user_main_settings is not None:
+            self.main_settings.update(user_main_settings)
 
         self.num_channels = self.analyzer.get_num_channels()
         # this now private and shoudl be acess using function
