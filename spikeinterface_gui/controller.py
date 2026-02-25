@@ -340,8 +340,8 @@ class Controller():
 
         self.curation_callback = curation_callback
         self.curation_callback_kwargs = curation_callback_kwargs
-        self.curation = False
-        if curation:
+        self.curation = curation
+        if self.curation:
             # rules:
             #  * if user sends curation_data, then it is used
             #  * otherwise, if curation_data already exists in folder it is used
@@ -393,7 +393,6 @@ class Controller():
 
             curation_data = CurationModel(**curation_data).model_dump()
             self.curation_data = curation_data
-            self.curation = True
 
     def check_is_view_possible(self, view_name):
         from .viewlist import get_all_possible_views
