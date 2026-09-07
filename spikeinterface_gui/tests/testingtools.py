@@ -26,7 +26,9 @@ def clean_all(test_folder):
                 # retry after a short delay, to give the OS time to release the file handles
                 time.sleep(0.5)
     # don't let a failure here cause an otherwise-passing test to fail
-    shutil.rmtree(folder, ignore_errors=True) 
+    shutil.rmtree(folder, ignore_errors=True)
+
+
 def make_analyzer_folder(test_folder, case="small", unit_dtype="str"):
     clean_all(test_folder)
 
@@ -141,6 +143,51 @@ def make_analyzer_folder(test_folder, case="small", unit_dtype="str"):
     sorting_analyzer.compute(["spike_amplitudes", "spike_locations"], **job_kwargs)
     sorting_analyzer.compute("quality_metrics", metric_names=["snr", "firing_rate"])
     sorting_analyzer.compute("template_metrics")
+
+
+def prepare_analyzer(analyzer, only_some_extensions=False):
+    if only_some_extensions:
+        analyzer = analyzer.copy()
+        for k in ("principal_components", "template_similarity", "spike_amplitudes"):
+            analyzer.delete_extension(k)
+        print(analyzer)
+
+    n = analyzer.unit_ids.size
+    analyzer.sorting.set_property(key='yep', values=np.array([f"yep{i}" for i in range(n)]))
+
+    for segment_index in range(analyzer.get_num_segments()):
+        shift = (segment_index + 1) * 100
+        gap = 5
+        times = analyzer.recording.get_times(segment_index)
+        times = times + shift
+        times[len(times) // 2:] += gap
+        analyzer.recording.set_times(times, segment_index=segment_index)
+
+    return analyzer
+
+
+def make_extra_unit_properties(analyzer):
+    n = analyzer.unit_ids.size
+    return dict(
+        yop=np.array([f"yop{i}" for i in range(n)]),
+        yip=np.array([f"yip{i}" for i in range(n)]),
+    )
+
+
+def make_events_dict(analyzer):
+    events_dict = {"event1": {"times": []}, "event2": {"times": []}}
+    for segment_index in range(analyzer.get_num_segments()):
+        times = analyzer.recording.get_times(segment_index)
+        events_dict["event1"]["times"].append(np.random.choice(times, 30))
+        events_dict["event2"]["times"].append(np.random.choice(times, 50))
+        # add some events outside of recording times to test filtering
+        events_dict["event1"]["times"][-1] = np.concatenate(
+            [events_dict["event1"]["times"][-1], [times[0] - 10, times[-1] + 20]]
+        )
+        events_dict["event2"]["times"][-1] = np.concatenate(
+            [events_dict["event2"]["times"][-1], [times[0] - 5, times[-1] + 15]]
+        )
+    return events_dict
 
 
 def make_curation_dict(analyzer):
