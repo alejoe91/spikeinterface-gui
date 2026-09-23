@@ -1,6 +1,7 @@
 import sys
 import argparse
 import json
+import time
 from pathlib import Path
 from typing import Callable
 import numpy as np
@@ -52,7 +53,8 @@ def run_mainwindow(
     mode: 'desktop' | 'web'
         The GUI mode to use.
         'desktop' will run a Qt app.
-        'web' will run a Panel app.
+        'web' will run a Panel app. Each browser session (tab or page reload) gets
+        its own instance of the GUI, with its own curation.
     with_traces: bool, default: True
         If True, traces are displayed
     curation: bool, default: False
@@ -109,6 +111,12 @@ def run_mainwindow(
         A dictionary of user settings for each view, which overwrite the default settings.
     disable_save_settings_button: bool, default: False
         If True, disables the "save default settings" button, so that user cannot do this.
+
+    Returns
+    -------
+    win | server
+        The main window. In "web" mode with `start_app=True` the windows are created by
+        the server (one per browser session) so the Panel server is returned instead.
     """
 
     if mode == "desktop":
@@ -141,37 +149,38 @@ def run_mainwindow(
     if recording is not None:
         analyzer.set_temporary_recording(recording)
 
-    if verbose:
-        import time
-        t0 = time.perf_counter()
-
     layout_dict = get_layout_description(layout_preset, layout)
     if skip_extensions is None:
         skip_extensions = find_skippable_extensions(layout_dict)
 
-    controller = Controller(
-        analyzer,
-        backend=backend,
-        verbose=verbose,
-        curation=curation,
-        curation_data=curation_dict,
-        label_definitions=label_definitions,
-        with_traces=with_traces,
-        displayed_unit_properties=displayed_unit_properties,
-        extra_unit_properties=extra_unit_properties,
-        skip_extensions=skip_extensions,
-        disable_save_settings_button=disable_save_settings_button,
-        events=events,
-        external_data=external_data,
-        curation_callback=curation_callback,
-        curation_callback_kwargs=curation_callback_kwargs,
-        user_main_settings=user_main_settings
-    )
-    if verbose:
-        t1 = time.perf_counter()
-        print('controller init time', t1 - t0)
+    def make_controller():
+        if verbose:
+            t0 = time.perf_counter()
+        controller = Controller(
+            analyzer,
+            backend=backend,
+            verbose=verbose,
+            curation=curation,
+            curation_data=curation_dict,
+            label_definitions=label_definitions,
+            with_traces=with_traces,
+            displayed_unit_properties=displayed_unit_properties,
+            extra_unit_properties=extra_unit_properties,
+            skip_extensions=skip_extensions,
+            disable_save_settings_button=disable_save_settings_button,
+            events=events,
+            external_data=external_data,
+            curation_callback=curation_callback,
+            curation_callback_kwargs=curation_callback_kwargs,
+            user_main_settings=user_main_settings
+        )
+        if verbose:
+            t1 = time.perf_counter()
+            print('controller init time', t1 - t0)
+        return controller
 
     if backend == "qt":
+        controller = make_controller()
         from spikeinterface_gui.myqt import QT, mkQApp
         from spikeinterface_gui.backend_qt import QtMainWindow
 
@@ -194,14 +203,27 @@ def run_mainwindow(
     
     elif backend == "panel":
         from .backend_panel import PanelMainWindow, start_server
-        win = PanelMainWindow(controller, layout_dict=layout_dict, user_settings=user_settings)
 
-        if start_app or panel_window_servable:
+        def make_window():
+            # Bokeh models can only belong to a single document, so every browser session
+            # (a new tab, but also a page reload) gets its own controller and views.
+            # When they are shared, any later change to a layout raises
+            # "Models must be owned by only a single document" and breaks the document.
+            win = PanelMainWindow(make_controller(), layout_dict=layout_dict, user_settings=user_settings)
             win.main_layout.servable(title='SpikeInterface GUI')
+            return win.main_layout
 
         if start_app:
+            # the window is not created here : the server creates one per session
             panel_start_server_kwargs = panel_start_server_kwargs or {}
-            _ = start_server(win, address=address, port=port, **panel_start_server_kwargs)
+            server, _, _, _ = start_server(
+                make_window, address=address, port=port, **panel_start_server_kwargs
+            )
+            return server
+
+        win = PanelMainWindow(make_controller(), layout_dict=layout_dict, user_settings=user_settings)
+        if panel_window_servable:
+            win.main_layout.servable(title='SpikeInterface GUI')
 
     return win
 

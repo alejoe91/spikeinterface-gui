@@ -480,10 +480,11 @@ def start_server(window_or_dict, address="localhost", port=0, **panel_kwargs):
 
     Parameters
     ----------
-    window_or_dict : Panel window or dict
-        The main window instance containing the layout to serve or a dictionary of
-        windows to serve. If a dictionary is provided, it should contain the names
-        of the views as keys and their corresponding Panel objects as values.
+    window_or_dict : Panel window or callable or dict
+        The main window instance containing the layout to serve, a function creating
+        the layout for each session, or a dictionary of windows to serve. If a dictionary
+        is provided, it should contain the names of the views as keys and their
+        corresponding Panel objects (or functions) as values.
     address : str, optional
         The address to bind the server to. Defaults to "localhost".
         If "auto-ip" is specified, it will use the local IP address.
@@ -513,7 +514,10 @@ def start_server(window_or_dict, address="localhost", port=0, **panel_kwargs):
     show = panel_kwargs.get("show", True)
     verbose = panel_kwargs.get("verbose", True)
 
-    if not isinstance(window_or_dict, dict):
+    if callable(window_or_dict):
+        # A function creating one window per session : Panel calls it for each session
+        window_dict = {"/": window_or_dict}
+    elif not isinstance(window_or_dict, dict):
         # If a single window is provided, convert it to a dictionary
         mainwindow = window_or_dict
         mainwindow.main_layout = mainwindow.main_layout if hasattr(mainwindow, 'main_layout') else mainwindow.layout
