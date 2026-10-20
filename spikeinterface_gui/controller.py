@@ -13,6 +13,7 @@ from spikeinterface.core.sorting_tools import spike_vector_to_indices
 from spikeinterface.curation import validate_curation_dict, apply_curation
 from spikeinterface.curation.curation_model import Curation
 from spikeinterface.widgets.utils import make_units_table_from_analyzer
+from spikeinterface.widgets.sorting_summary import _default_displayed_unit_properties
 
 from .utils_global import add_new_unit_ids_to_curation_dict
 
@@ -30,7 +31,6 @@ _default_main_settings = dict(
     num_colors=20,
 )
 
-from spikeinterface.widgets.sorting_summary import _default_displayed_unit_properties
         
 
 
