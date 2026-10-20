@@ -2,12 +2,11 @@ import warnings
 
 import param
 import panel as pn
-import numpy as np
-from copy import copy
 
 from .viewlist import get_all_possible_views
-from .layout_presets import get_layout_description
 from .utils_global import fill_unnecessary_space, get_present_zones_in_half_of_layout
+
+
 # Used by views to emit/trigger signals
 class SignalNotifier(param.Parameterized):
     spike_selection_changed = param.Event()
@@ -274,12 +273,15 @@ class PanelMainWindow:
 
             tabs = [("📊", view.layout)]
             if view_class._settings is not None:
-                settings = pn.Param(view.settings._parameterized, sizing_mode="stretch_height", 
+                settings_param = pn.Param(view.settings._parameterized, sizing_mode="stretch_height",
                                     name=f"{view_name.capitalize()} settings")
+                view._panel_settings_widget = settings_param
                 if view_class._need_compute:
                     compute_button = pn.widgets.Button(name="Compute", button_type="primary")
                     compute_button.on_click(view.compute)
-                    settings = pn.Row(settings, compute_button)
+                    settings = pn.Row(settings_param, compute_button)
+                else:
+                    settings = settings_param
                 tabs.append(("⚙️", settings))
 
             tabs.append(("ℹ️", info))
@@ -445,11 +447,18 @@ class PanelMainWindow:
         if "curation" not in self.views:
             return
 
+        from .utils_panel import schedule_curation_change
+
         curation_view = self.views["curation"]
-        self.controller.set_curation_data(curation_data)
-        curation_view.notify_manual_curation_updated()
-        self.controller.current_curation_saved = True
-        curation_view.refresh()
+
+        # scheduled like the other curation changes, so it is not interleaved with them
+        def _apply():
+            self.controller.set_curation_data(curation_data)
+            curation_view.notify_manual_curation_updated()
+            self.controller.current_curation_saved = True
+            curation_view.refresh()
+
+        schedule_curation_change(_apply)
 
         # we also need to refresh the unit list view to update the unit visibility according to the new curation
         if "unitlist" in self.views:

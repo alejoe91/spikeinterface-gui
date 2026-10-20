@@ -38,6 +38,7 @@ class MixinViewTrace:
             spikes_seg = self.controller.spikes[sl]
             i1, i2 = np.searchsorted(spikes_seg["sample_index"], [ind1, ind2])
             spikes_chunk = spikes_seg[i1:i2].copy()
+            spikes_channel_chunk = self.controller._ext_channel_inds[spikes_chunk["unit_index"]]
             spikes_chunk["sample_index"] -= ind1
 
             # for trace map view, this returns the channels ordered by depth
@@ -73,7 +74,7 @@ class MixinViewTrace:
 
                 # Get spikes for this unit
                 unit_spikes = spikes_chunk[inds]
-                channel_inds = unit_spikes["channel_index"]
+                channel_inds = spikes_channel_chunk[inds]
                 sample_inds = unit_spikes["sample_index"]
 
                 chan_mask = np.isin(channel_inds, visible_channel_inds)
@@ -458,7 +459,7 @@ class MixinViewTrace:
         self.refresh()
 
     def _panel_add_event_lines(self, t1, t2):
-        if self.event_line is not None:
+        if self.controller.has_extension("events") and self.event_line is not None:
             event_samples = self.controller.get_events(self.event_key)
             segment_index = self.controller.get_time()[1]
             start_sample, end_sample = self.controller.get_chunk_indices(t1, t2, segment_index)
@@ -582,6 +583,10 @@ class MixinViewTrace:
         fig = self.figure
         yspan = [fig.y_range.start, fig.y_range.end]
         self.event_source.data = {"xs": [[evt_time, evt_time]], "ys": [yspan]}
+
+    def _panel_remove_event_line(self):
+        if self.controller.has_extension("events"):
+            self.event_source.data = {"xs": [], "ys": []}
 
     # TODO: pan behavior like Qt?
     # def _panel_on_pan_start(self, event):
@@ -933,14 +938,15 @@ def find_nearest_spike(controller, x, segment_index, max_distance_samples=None):
         max_distance_samples = controller.sampling_frequency // 30
 
     ind_click = controller.time_to_sample_index(x)
-    (in_seg,) = np.nonzero(controller.spikes["segment_index"] == segment_index)
+    sl = controller.segment_slices[segment_index]
 
-    if len(in_seg) == 0:
+    if sl.start == sl.stop:
         return None
 
-    nearest = np.argmin(np.abs(controller.spikes[in_seg]["sample_index"] - ind_click))
-    ind_spike_nearest = in_seg[nearest]
-    sample_index = controller.spikes[ind_spike_nearest]["sample_index"]
+    sample_index_seg = np.asarray(controller.spikes["sample_index"][sl])
+    nearest_in_seg = np.argmin(np.abs(sample_index_seg - ind_click))
+    ind_spike_nearest = sl.start + nearest_in_seg
+    sample_index = sample_index_seg[nearest_in_seg]
 
     if np.abs(ind_click - sample_index) > max_distance_samples:
         return None

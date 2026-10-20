@@ -1,6 +1,6 @@
 [project]
 name = "spikeinterface-gui"
-version = '0.13.1'
+version = '0.14.0'
 authors = [
   { name="Samuel Garcia", email="sam.garcia.die@gmail.com" },
   { name="Alessio Buccino", email="alessiop.buccino@gmail.com" },
@@ -17,8 +17,7 @@ classifiers = [
 ]
 
 dependencies = [
-    # "spikeinterface[full]>=0.104.0",
-    "spikeinterface @ git+https://github.com/SpikeInterface/spikeinterface.git",
+    "spikeinterface[full]>=0.105.0",
     "markdown",
     "glasbey"
 ]

@@ -1,6 +1,3 @@
-import time
-import numpy as np
-
 from .view_base import ViewBase
 
 
@@ -36,8 +33,6 @@ class UnitListView(ViewBase):
     def _qt_make_layout(self):
         
         from .myqt import QT
-        import pyqtgraph as pg
-        
 
         self.menu = None
         self.layout = QT.QVBoxLayout()
@@ -47,21 +42,7 @@ class UnitListView(ViewBase):
         but.clicked.connect(self._qt_select_columns)
         tb.addWidget(but)
 
-
-        visible_cols = []
-        for col in self.controller.units_table.columns:
-            visible_cols.append(
-                {'name': str(col), 'type': 'bool', 'value': col in self.controller.displayed_unit_properties, 'default': True}
-            )
-        self.visible_columns = pg.parametertree.Parameter.create( name='visible columns', type='group', children=visible_cols)
-        self.tree_visible_columns = pg.parametertree.ParameterTree(parent=self.qt_widget)
-        self.tree_visible_columns.header().hide()
-        self.tree_visible_columns.setParameters(self.visible_columns, showTop=True)
-        # self.tree_visible_columns.setWindowTitle(u'visible columns')
-        # self.tree_visible_columns.setWindowFlags(QT.Qt.Window)
-        self.visible_columns.sigTreeStateChanged.connect(self._qt_on_visible_columns_changed)
-        self.layout.addWidget(self.tree_visible_columns)
-        self.tree_visible_columns.hide()
+        self._qt_setup_visible_columns()
 
         # h = QT.QHBoxLayout()
         # self.layout.addLayout(h)
@@ -127,6 +108,40 @@ class UnitListView(ViewBase):
                 self.shortcut_noise.setKey(QT.QKeySequence('n'))
                 self.shortcut_noise.activated.connect(lambda: self._qt_set_default_label('noise'))
 
+    def _qt_setup_visible_columns(self):
+
+        import pyqtgraph as pg
+
+        # on reinitialize the previous tree must be discarded, otherwise it stays in the
+        # layout with stale columns and its signal still connected
+        tree_index = 0
+        if getattr(self, "tree_visible_columns", None) is not None:
+            self.visible_columns.sigTreeStateChanged.disconnect(self._qt_on_visible_columns_changed)
+            tree_index = self.layout.indexOf(self.tree_visible_columns)
+            self.layout.removeWidget(self.tree_visible_columns)
+            self.tree_visible_columns.setParent(None)
+            self.tree_visible_columns.deleteLater()
+            self.tree_visible_columns = None
+
+        visible_cols = []
+        for col in self.controller.units_table.columns:
+            visible_cols.append(
+                {'name': str(col), 'type': 'bool', 'value': col in self.controller.displayed_unit_properties, 'default': True}
+            )
+        self.visible_columns = pg.parametertree.Parameter.create( name='visible columns', type='group', children=visible_cols)
+        self.tree_visible_columns = pg.parametertree.ParameterTree(parent=self.qt_widget)
+        self.tree_visible_columns.header().hide()
+        self.tree_visible_columns.setParameters(self.visible_columns, showTop=True)
+
+        self.visible_columns.sigTreeStateChanged.connect(self._qt_on_visible_columns_changed)
+        self.layout.insertWidget(tree_index, self.tree_visible_columns)
+        self.tree_visible_columns.hide()
+
+    def _qt_reinitialize(self):
+
+        self._qt_setup_visible_columns()
+        self._qt_full_table_refresh()
+        self._qt_refresh()
 
     def _qt_on_column_moved(self, logical_index, old_visual_index, new_visual_index):
         # Update stored column order
@@ -148,8 +163,6 @@ class UnitListView(ViewBase):
 
         self._qt_refresh_visibility_items()
 
-
-
     def _qt_refresh_visibility_items(self):
         from .myqt import QT
 
@@ -157,16 +170,23 @@ class UnitListView(ViewBase):
 
         visible_unit_ids = self.controller.get_visible_unit_ids()
 
-        view_target_unit_id = visible_unit_ids[0] 
+        view_target_unit_id = visible_unit_ids[0]
         target_item = self.items_visibility[view_target_unit_id]
         self.table.scrollToItem(target_item, QT.QAbstractItemView.PositionAtCenter)
-        
+
+        unit_ids_list = list(self.controller.unit_ids)
         for unit_id in self.controller.unit_ids:
             item = self.items_visibility[unit_id]
             item.setCheckState(QT.Qt.Unchecked)
         for unit_id in visible_unit_ids:
             item = self.items_visibility[unit_id]
             item.setCheckState(QT.Qt.Checked)
+
+        self.table.clearSelection()
+        for unit_id in visible_unit_ids:
+            row = unit_ids_list.index(unit_id)
+            self.table.selectRow(row)
+
         self._qt_refresh_color_icons()
 
     def _qt_refresh_color_icons(self):
@@ -220,7 +240,6 @@ class UnitListView(ViewBase):
             self.column_order = [self.table.horizontalHeader().logicalIndex(i) for i in range(self.table.columnCount())]
         
         self.table.clear()
-
 
         internal_column_names = ['unit_id', 'visible',  'channel_id']
 
@@ -277,7 +296,7 @@ class UnitListView(ViewBase):
             item.unit_id = unit_id
             self.items_visibility[unit_id] = item
             
-            channel_index = self.controller.get_extremum_channel(unit_id)
+            channel_index = self.controller.get_main_channel(unit_id)
             channel_id = self.controller.channel_ids[channel_index]
             item = CustomItem(f'{channel_id}')
             item.setFlags(QT.Qt.ItemIsEnabled|QT.Qt.ItemIsSelectable)
@@ -491,10 +510,11 @@ class UnitListView(ViewBase):
                 {"id": str(unit_id), "color": mcolors.to_hex(self.controller.get_unit_color(unit_id))}
             )
             data["channel_id"].append(
-                self.controller.channel_ids[self.controller.get_extremum_channel(unit_id)]
+                self.controller.channel_ids[self.controller.get_main_channel(unit_id)]
             )
         for col in self.controller.displayed_unit_properties:
-            data[col] = self.controller.units_table[col]
+            if col in self.controller.units_table.columns:
+                data[col] = self.controller.units_table[col]
 
         df = pd.DataFrame(
             data=data,
@@ -589,16 +609,22 @@ class UnitListView(ViewBase):
         shortcuts_component = KeyboardShortcuts(shortcuts=shortcuts)
         shortcuts_component.on_msg(self._panel_handle_shortcut)
 
-        self.layout = pn.Column(
-            pn.Row(
-                self.info_text,
-            ),
-            buttons,
-            sizing_mode="stretch_width",
-        )
+        if self.layout is None:
+            self.layout = pn.Column(
+                pn.Row(
+                    self.info_text,
+                ),
+                buttons,
+                sizing_mode="stretch_width",
+            )
 
-        self.layout.append(self.table)
-        self.layout.append(shortcuts_component)
+            self.layout.append(self.table)
+            self.layout.append(shortcuts_component)
+        else:
+            self.layout[0][0] = self.info_text
+            self.layout[1] = buttons
+            self.layout[2] = self.table
+            self.layout[3] = shortcuts_component
 
         self.refresh_button.on_click(self._panel_refresh_click)
 
@@ -623,6 +649,43 @@ class UnitListView(ViewBase):
         self.layout[table_index] = self.table
 
         self._panel_refresh_header()
+
+    def _panel_setup_visible_columns(self):
+        from .backend_panel import create_settings, listen_setting_changes
+
+        # Preserve existing column visibility preferences set by the user
+        existing_values = {}
+        if hasattr(self, "settings"):
+            for col in self.controller.units_table.columns:
+                try:
+                    existing_values[col] = self.settings[col]
+                except Exception:
+                    pass
+
+        # # Any column not in existing_values is new (added by curation).
+        # # Add new columns to displayed_unit_properties so they appear by default.
+        # for col in self.controller.units_table.columns:
+        #     if col not in existing_values:
+        #         self.controller.displayed_unit_properties.append(col)
+
+        # Rebuild the class-level _settings list for all current columns
+        UnitListView._settings = [
+            {
+                "name": str(col),
+                "type": "bool",
+                "value": existing_values.get(col, col in self.controller.displayed_unit_properties),
+                "default": True,
+            }
+            for col in self.controller.units_table.columns
+        ]
+
+        # Recreate the settings proxy and re-register watchers on the new proxy
+        create_settings(self)
+        listen_setting_changes(self)
+
+        # Update the gear-tab pn.Param widget so it reflects the new parameterized object
+        if hasattr(self, "_panel_settings_widget"):
+            self._panel_settings_widget.object = self.settings._parameterized
 
     def _panel_refresh_click(self, event):
         self.table.reset()
@@ -650,6 +713,11 @@ class UnitListView(ViewBase):
 
         # refresh header
         self._panel_refresh_header()
+
+    def _panel_reinitialize(self):
+        self._panel_setup_visible_columns()
+        self._panel_make_layout()
+        self._panel_refresh()
 
     def _panel_refresh_header(self):
         unit_ids = self.controller.unit_ids
@@ -718,17 +786,26 @@ class UnitListView(ViewBase):
         self.refresh()
 
     def _panel_on_edit(self, event):
+        from .utils_panel import schedule_curation_change
+
         column = event.column
         if self.label_definitions is not None and column in self.label_definitions:
             row = event.row
-            unit_id = self.table.value.index[row]
-            new_label = event.value
-            if new_label == "":
-                new_label = None
-            self.controller.set_label_to_unit(unit_id, column, new_label)
-            self.notify_manual_curation_updated()
-            # like in Qt, move to the next unit and make it visible alone
-            self.table.select_next_row(only=True, from_row=row)
+
+            def _apply():
+                unit_id = self.table.value.index[row]
+                # event.value is filled from the table data on a worker thread and can be stale
+                # when events are processed concurrently: read it again here
+                new_label = self.table.value[column].iloc[row]
+                if new_label == "":
+                    new_label = None
+                self.controller.set_label_to_unit(unit_id, column, new_label)
+                self.notify_manual_curation_updated()
+                # like in Qt, move to the next unit and make it visible alone
+                self.table.select_next_row(only=False, from_row=row)
+                return self._panel_on_only_selection
+
+            schedule_curation_change(_apply)
         self.notifier.notify_active_view_updated()
 
     def _panel_update_labels(self):
@@ -764,49 +841,72 @@ class UnitListView(ViewBase):
         return unit_ids[self.table.selection]
 
     def _panel_delete_unit(self):
-        removed_unit_ids = self.get_selected_unit_ids()
-        success = self.controller.make_manual_delete_if_possible(removed_unit_ids)
-        if not success:
-            self.warning("Delete could not be performed. Ensure unit ids are not removed or merged already.")
-            return
-        self.notify_manual_curation_updated()
-        self.refresh()
+        from .utils_panel import schedule_curation_change
+
+        def _apply():
+            removed_unit_ids = self.get_selected_unit_ids()
+            success = self.controller.make_manual_delete_if_possible(removed_unit_ids)
+            if not success:
+                self.warning("Delete could not be performed. Ensure unit ids are not removed or merged already.")
+                return
+            self.notify_manual_curation_updated()
+            self.refresh()
+
+        schedule_curation_change(_apply)
 
     def _panel_merge_units(self):
-        merge_unit_ids = self.get_selected_unit_ids()
-        success = self.controller.make_manual_merge_if_possible(merge_unit_ids)
-        if not success:
-            self.warning(
-                "Merge could not be performed. Ensure unit ids are not removed "
-                "merged, or split already."
-            )
-            return
-        self.notify_manual_curation_updated()
-        self.refresh()
+        from .utils_panel import schedule_curation_change
+
+        def _apply():
+            merge_unit_ids = self.get_selected_unit_ids()
+            success = self.controller.make_manual_merge_if_possible(merge_unit_ids)
+            if not success:
+                self.warning(
+                    "Merge could not be performed. Ensure unit ids are not removed "
+                    "merged, or split already."
+                )
+                return
+            self.notify_manual_curation_updated()
+            self.refresh()
+
+        schedule_curation_change(_apply)
 
     def _panel_remove_from_merge(self):
-        merge_unit_ids = self.get_selected_unit_ids()
-        success = self.controller.remove_units_from_merge_if_possible(merge_unit_ids)
-        if not success:
-            self.warning(
-                "Could not remove units from a merge. Ensure all selected units are in a merge "
-                "group, and that you are not leaving zero or one units in the merge group."
-            )
-            return
-        self.notify_manual_curation_updated()
-        self.refresh()
+        from .utils_panel import schedule_curation_change
+
+        def _apply():
+            merge_unit_ids = self.get_selected_unit_ids()
+            success = self.controller.remove_units_from_merge_if_possible(merge_unit_ids)
+            if not success:
+                self.warning(
+                    "Could not remove units from a merge. Ensure all selected units are in a merge "
+                    "group, and that you are not leaving zero or one units in the merge group."
+                )
+                return
+            self.notify_manual_curation_updated()
+            self.refresh()
+
+        schedule_curation_change(_apply)
 
     def _panel_set_default_label(self, label):
-        selected_unit_ids = self._panel_get_selected_unit_ids()
-        if len(selected_unit_ids) == 0:
-            return
-        for unit_id in selected_unit_ids:
-            self.controller.set_label_to_unit(unit_id, "quality", label)
-        self.table.value.loc[selected_unit_ids, "quality"] = label if label is not None else ""
-        self.notify_manual_curation_updated()
-        self.refresh()
-        # like in Qt, move to the next unit and make it visible alone
-        self.table.select_next_row(only=True)
+        from .utils_panel import schedule_curation_change
+
+        def _apply():
+            # the selection is read here (on the event loop), so it reflects the
+            # select_next_row of the previous label change
+            selected_unit_ids = self._panel_get_selected_unit_ids()
+            if len(selected_unit_ids) == 0:
+                return
+            for unit_id in selected_unit_ids:
+                self.controller.set_label_to_unit(unit_id, "quality", label)
+            self.table.value.loc[selected_unit_ids, "quality"] = label if label is not None else ""
+            self.notify_manual_curation_updated()
+            self.refresh()
+            # like in Qt, move to the next unit and make it visible alone
+            self.table.select_next_row(only=False)
+            return self._panel_on_only_selection
+
+        schedule_curation_change(_apply)
 
     def _panel_handle_shortcut(self, event):
         if self.is_view_active():
