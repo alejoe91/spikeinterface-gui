@@ -151,7 +151,8 @@ Some things are not available in comparison mode:
 
 * curation, and therefore merging and splitting,
 * the views that rely on extensions that cannot be shared between two sortings:
-  ``template_similarity``, ``correlograms``, ``isi_histograms`` and ``principal_components``.
+  ``template_similarity``, ``isi_histograms`` and ``principal_components``.
+  For ``correlograms``, only the auto-correlograms of each sorter are shown.
 
 Only the recording of the first analyzer is used to display traces, and the two analyzers must
 have matching recording attributes for the trace views to be shown at all.

@@ -12,20 +12,44 @@ class CorrelogramView(ViewBase):
         {'name': 'window_ms', 'type': 'float', 'value' : 50. },
         {'name': 'bin_ms', 'type': 'float', 'value' : 1.0 },
         {'name': 'display_axis', 'type': 'bool', 'value' : True },
+        {'name': 'show_cross_correlograms', 'type': 'bool', 'value' : True },
     ]
     _need_compute = True
 
     def __init__(self, controller=None, parent=None, backend="qt"):
         ViewBase.__init__(self, controller=controller, parent=parent,  backend=backend)
 
-        self.ccg, self.bins = self.controller.get_correlograms()
         self.figure_cache = {}
         self.max_cache_size = 20
 
-    
+        # the settings are changed before self.ccg is set, so that _on_settings_changed
+        # does not discard the loaded correlograms
+        self.ccg, self.bins = None, None
+        ccg, bins = self.controller.get_correlograms()
+        if bins is not None:
+            # match the loaded correlograms, otherwise any setting change would discard them
+            self.settings['window_ms'] = float(bins[-1] - bins[0])
+            self.settings['bin_ms'] = float(bins[1] - bins[0])
+        if self.controller.has_extension('comparison'):
+            # in comparison mode only the ACGs are available, the off-diagonal is zeros
+            self.settings['show_cross_correlograms'] = False
+        self.ccg, self.bins = ccg, bins
+
     def _on_settings_changed(self):
-        self.ccg = None
+        # only a new window/bin needs a re-compute, the display settings just need new figures
+        if self.bins is not None:
+            window_ms = self.bins[-1] - self.bins[0]
+            bin_ms = self.bins[1] - self.bins[0]
+            if not (np.isclose(window_ms, self.settings['window_ms']) and np.isclose(bin_ms, self.settings['bin_ms'])):
+                self.ccg = None
+        self.figure_cache = {}
         self.refresh()
+
+    def _get_columns(self, r, n):
+        """The columns of row r: the upper triangle, or only the diagonal (the ACG)"""
+        if self.settings['show_cross_correlograms']:
+            return range(r, n)
+        return range(r, r + 1)
 
     def _compute(self):
         self.ccg, self.bins = self.controller.compute_correlograms(
@@ -77,7 +101,7 @@ class CorrelogramView(ViewBase):
         bins = self.bins
         
         for r in range(n):
-            for c in range(r, n):
+            for c in self._get_columns(r, n):
                 unit_id1 = visible_unit_ids[r]
                 unit_id2 = visible_unit_ids[c]
                 if (unit_id1, unit_id2) in self.figure_cache:
@@ -114,7 +138,11 @@ class CorrelogramView(ViewBase):
                     if len(self.figure_cache) >= self.max_cache_size:
                         self.figure_cache.pop(next(iter(self.figure_cache)))
                     self.figure_cache[(unit_id1, unit_id2)] = plot
-                self.grid.addItem(plot, row=r, col=c)
+                if self.settings['show_cross_correlograms']:
+                    self.grid.addItem(plot, row=r, col=c)
+                else:
+                    # only ACGs: side by side on one row
+                    self.grid.addItem(plot, row=0, col=r)
     
     ## panel ##
     def _panel_make_layout(self):
@@ -157,7 +185,7 @@ class CorrelogramView(ViewBase):
         first_fig = None
         for r in range(n):
             row_plots = []
-            for c in range(r, n):
+            for c in self._get_columns(r, n):
                 unit1 = visible_unit_ids[r]
                 unit2 = visible_unit_ids[c]
 
@@ -222,9 +250,15 @@ class CorrelogramView(ViewBase):
                         self.figure_cache.pop(next(iter(self.figure_cache)))
                     self.figure_cache[(unit1, unit2)] = fig
                 row_plots.append(fig)
-            # Fill row with None for proper spacing
-            full_row = [None] * r + row_plots + [None] * (n - len(row_plots))
-            figures.append(full_row)
+            if self.settings['show_cross_correlograms']:
+                # Fill row with None for proper spacing
+                full_row = [None] * r + row_plots + [None] * (n - r - len(row_plots))
+                figures.append(full_row)
+            else:
+                # only ACGs: side by side on one row
+                if len(figures) == 0:
+                    figures.append([])
+                figures[0].extend(row_plots)
 
         grid = gridplot(figures, toolbar_location="right", sizing_mode="stretch_both")
         grid.toolbar.logo = None
@@ -239,4 +273,11 @@ CorrelogramView._gui_help_txt = """
 ## Correlograms View
 
 This view shows the auto-correlograms and cross-correlograms of the selected units.
+
+### Settings
+- **window_ms** / **bin_ms** : the correlogram window and bin size (needs a re-compute).
+- **display_axis** : show the axes of each plot.
+- **show_cross_correlograms** : show the cross-correlograms (upper triangle), or only the
+  auto-correlograms side by side. In comparison mode only the auto-correlograms of both
+  sorters are available, so this is off by default.
 """

@@ -265,8 +265,8 @@ def run_launcher(mode="desktop", analyzer_folders=None, root_folder=None, addres
 
 
 # curation is off in comparison mode, and these views need extensions that cannot be
-# shared between two different sortings
-_comparison_incompatible_views = ("merge", "curation", "similarity", "correlogram", "isi")
+# shared between two different sortings (the correlogram view only shows the ACGs)
+_comparison_incompatible_views = ("merge", "curation", "similarity", "isi")
 
 
 def run_mainwindow_comparison(

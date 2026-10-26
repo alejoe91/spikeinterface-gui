@@ -109,15 +109,16 @@ _presets['merge_focus'] = merge_focus_layout
 
 # comparison mode: the unit list is replaced by the comparison table and the
 # comparison specific views take the place of similarity/ndscatter.
-# merge, curation, correlogram and isi are not available when comparing two analyzers.
+# merge, curation and isi are not available when comparing two analyzers, and the
+# correlogram view only shows the auto-correlograms.
 comparison_layout = dict(
-    zone1=['spikelist'],
+    zone1=['comparespikes'],
     zone2=['compareunitlist'],
     zone3=['trace', 'tracemap', 'spikeamplitude', 'amplitudescalings', 'spikedepth', 'spikerate', 'event'],
     zone4=[],
     zone5=['probe'],
     zone6=['venn', 'agreementmatrix'],
     zone7=['waveform', 'waveformheatmap'],
-    zone8=['metrics', 'maintemplate', 'mainsettings'],
+    zone8=['correlogram', 'metrics', 'maintemplate', 'mainsettings'],
 )
 _presets['comparison'] = comparison_layout

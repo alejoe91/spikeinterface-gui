@@ -342,6 +342,8 @@ class Controller():
         self.random_spikes_indices = np.asarray(self.analyzer.get_extension("random_spikes").get_data())
         self._random_spikes_set = set(int(i) for i in self.random_spikes_indices)
 
+        self._ext_channel_inds = np.array([self._main_channels[unit_id] for unit_id in self.unit_ids])
+
         # self.num_spikes = self.analyzer.sorting.count_num_spikes_per_unit(outputs="dict")
         self._build_spike_indices(num_seg)
 

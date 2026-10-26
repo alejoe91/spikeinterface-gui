@@ -77,6 +77,19 @@ class VennView(ViewBase):
         geometry = solve_venn_geometry(len(venn['only1']), len(venn['matched']), len(venn['only2']))
         return venn, geometry
 
+    def get_clicked_region(self, x, y, geometry):
+        """The region under (x, y): 'matched', 'only1', 'only2' or None"""
+        radius1, radius2, center_x1, center_x2 = geometry
+        inside1 = (x - center_x1) ** 2 + y ** 2 <= radius1 ** 2
+        inside2 = (x - center_x2) ** 2 + y ** 2 <= radius2 ** 2
+        if inside1 and inside2:
+            return 'matched'
+        elif inside1:
+            return 'only1'
+        elif inside2:
+            return 'only2'
+        return None
+
     def select_units_on_click(self, x, y, reset=True):
         """
         Make visible one random entry of the clicked region.
@@ -89,20 +102,11 @@ class VennView(ViewBase):
         intersection an entry is a matched *pair*, so both of its units become visible,
         which is still that one row.
         """
-        venn, (radius1, radius2, center_x1, center_x2) = self.get_venn_data()
-
-        inside1 = (x - center_x1) ** 2 + y ** 2 <= radius1 ** 2
-        inside2 = (x - center_x2) ** 2 + y ** 2 <= radius2 ** 2
-
-        if inside1 and inside2:
-            candidates = venn['matched']
-        elif inside1:
-            candidates = venn['only1']
-        elif inside2:
-            candidates = venn['only2']
-        else:
+        venn, geometry = self.get_venn_data()
+        region = self.get_clicked_region(x, y, geometry)
+        if region is None:
             return
-
+        candidates = venn[region]
         if len(candidates) == 0:
             return
 
@@ -176,8 +180,6 @@ class VennView(ViewBase):
     ## Qt ##
     def _qt_make_layout(self):
         from .myqt import QT
-        import pyqtgraph as pg
-        from .utils_qt import ViewBoxHandlingClickToPositionWithCtrl
 
         self.layout = QT.QVBoxLayout()
 
@@ -200,6 +202,12 @@ class VennView(ViewBase):
         self._commit_timer.setSingleShot(True)
         self._commit_timer.setInterval(150)
         self._commit_timer.timeout.connect(self._qt_commit_threshold)
+
+        self._qt_make_venn_plot()
+
+    def _qt_make_venn_plot(self):
+        import pyqtgraph as pg
+        from .utils_qt import ViewBoxHandlingClickToPositionWithCtrl
 
         self.graphicsview = pg.GraphicsView()
         self.layout.addWidget(self.graphicsview)
@@ -229,9 +237,6 @@ class VennView(ViewBase):
         self.select_units_on_click(x, y, reset=reset)
 
     def _qt_refresh(self):
-        from .myqt import QT
-        import pyqtgraph as pg
-
         # keep the slider in sync when the threshold is changed elsewhere, but never
         # while an edit of our own is still pending, otherwise a refresh triggered by
         # another view would snap the handle back under the user's cursor
@@ -243,11 +248,16 @@ class VennView(ViewBase):
         # the label always shows what the handle shows
         self.threshold_label.setText(f'{self.slider.value() / 100.:.2f}')
 
+        self._qt_draw_venn(*self.get_venn_data())
+
+    def _qt_draw_venn(self, venn, geometry):
+        from .myqt import QT
+        import pyqtgraph as pg
+
         for item in self._items:
             self.plot.removeItem(item)
         self._items = []
 
-        venn, geometry = self.get_venn_data()
         radius1, radius2, center_x1, center_x2 = geometry
 
         if radius1 == 0. and radius2 == 0.:
@@ -281,10 +291,6 @@ class VennView(ViewBase):
     ## panel ##
     def _panel_make_layout(self):
         import panel as pn
-        import bokeh.plotting as bpl
-        from bokeh.models import ColumnDataSource
-        from bokeh.events import Tap
-        from .utils_panel import _bg_color
 
         # value_throttled only fires at the end of a drag, which is the debounce that
         # the Qt side has to do with a timer
@@ -295,6 +301,21 @@ class VennView(ViewBase):
             sizing_mode="stretch_width",
         )
         self.threshold_slider.param.watch(self._panel_on_slider_changed, 'value_throttled')
+
+        self._panel_make_venn_figure()
+
+        self.layout = pn.Column(
+            self.threshold_slider,
+            self.figure,
+            styles={"display": "flex", "flex-direction": "column"},
+            sizing_mode="stretch_both",
+        )
+
+    def _panel_make_venn_figure(self):
+        import bokeh.plotting as bpl
+        from bokeh.models import ColumnDataSource
+        from bokeh.events import Tap
+        from .utils_panel import _bg_color
 
         self.figure = bpl.figure(
             sizing_mode="stretch_both",
@@ -324,13 +345,6 @@ class VennView(ViewBase):
 
         self.figure.on_event(Tap, self._panel_on_tap)
 
-        self.layout = pn.Column(
-            self.threshold_slider,
-            self.figure,
-            styles={"display": "flex", "flex-direction": "column"},
-            sizing_mode="stretch_both",
-        )
-
     def _panel_on_slider_changed(self, event):
         self.set_agreement_threshold(event.new)
 
@@ -345,7 +359,9 @@ class VennView(ViewBase):
         if self.threshold_slider.value != threshold:
             self.threshold_slider.value = threshold
 
-        venn, geometry = self.get_venn_data()
+        self._panel_draw_venn(*self.get_venn_data())
+
+    def _panel_draw_venn(self, venn, geometry):
         radius1, radius2, center_x1, center_x2 = geometry
 
         if radius1 == 0. and radius2 == 0.:

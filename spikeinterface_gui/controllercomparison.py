@@ -5,17 +5,19 @@ import pandas as pd
 
 
 from spikeinterface import compute_sparsity
-from spikeinterface.core import get_template_extremum_channel
 from spikeinterface.core.recording_tools import get_rec_attributes, do_recording_attributes_match
 from spikeinterface.comparison import compare_two_sorters
 from spikeinterface.widgets.utils import make_units_table_from_analyzer
 from spikeinterface.widgets.sorting_summary import _default_displayed_unit_properties
 
-from .controller import Controller, spike_dtype, _default_main_settings
+from spikeinterface.core.base import minimum_spike_dtype
+
+from .controller import Controller, _default_main_settings
 
 
 # extensions that cannot be shared/concatenated between the two analyzers
-_comparison_skip_extensions = ["principal_components", "correlograms", "isi_histograms", "template_similarity"]
+# correlograms are not concatenated either, only their diagonal (the ACGs) is used
+_comparison_skip_extensions = ["principal_components", "isi_histograms", "template_similarity"]
 
 
 class ControllerComparison(Controller):
@@ -150,38 +152,39 @@ class ControllerComparison(Controller):
         t0 = time.perf_counter()
         if verbose:
             print('Gathering all spikes')
-        self._extremum_channel1 = get_template_extremum_channel(
-            self.analyzer1, mode="extremum", peak_sign='both', outputs='index')
-        self._extremum_channel2 = get_template_extremum_channel(
-            self.analyzer2, mode="extremum", peak_sign='both', outputs='index')
-        self._extremum_channel = {}
+        main_channels1 = self.analyzer1.get_main_channels(outputs="index", with_dict=True)
+        main_channels2 = self.analyzer2.get_main_channels(outputs="index", with_dict=True)
+        self._main_channels = {}
         for unit_id in self.unit_ids:
-            if self.get_analyzer_index(unit_id) == 1:
-                extremum_channels = self._extremum_channel1
-            else:
-                extremum_channels = self._extremum_channel2
-            self._extremum_channel[unit_id] = extremum_channels[self.get_original_unit_id(unit_id)]
+            main_channels = main_channels1 if self.get_analyzer_index(unit_id) == 1 else main_channels2
+            self._main_channels[unit_id] = main_channels[self.get_original_unit_id(unit_id)]
+        self._ext_channel_inds = np.array([self._main_channels[unit_id] for unit_id in self.unit_ids])
 
-        spike_vector1 = self.analyzer1.sorting.to_spike_vector(concatenated=True, extremum_channel_inds=self._extremum_channel1)
-        spike_vector2 = self.analyzer2.sorting.to_spike_vector(concatenated=True, extremum_channel_inds=self._extremum_channel2)
+        spike_vector1 = self.analyzer1.sorting.to_spike_vector(concatenated=True)
+        spike_vector2 = self.analyzer2.sorting.to_spike_vector(concatenated=True)
 
-        random_spikes_indices1 = self.analyzer1.get_extension("random_spikes").get_data()
-        random_spikes_indices2 = self.analyzer2.get_extension("random_spikes").get_data()
+        random_spikes_indices1 = np.asarray(self.analyzer1.get_extension("random_spikes").get_data())
+        random_spikes_indices2 = np.asarray(self.analyzer2.get_extension("random_spikes").get_data())
 
         # align=True is required for np.searchsorted (and therefore trace views) to be fast.
-        self.spikes = np.zeros(spike_vector1.size + spike_vector2.size, dtype=np.dtype(spike_dtype, align=True))
+        self.spikes = np.zeros(spike_vector1.size + spike_vector2.size, dtype=np.dtype(minimum_spike_dtype, align=True))
         self.spikes['sample_index'] = np.concatenate([spike_vector1['sample_index'], spike_vector2['sample_index']])
         self.spikes['unit_index'] = np.concatenate([spike_vector1['unit_index'], spike_vector2['unit_index'] + self._num_units1])
         self.spikes['segment_index'] = np.concatenate([spike_vector1['segment_index'], spike_vector2['segment_index']])
-        self.spikes['channel_index'] = np.concatenate([spike_vector1['channel_index'], spike_vector2['channel_index']])
-        self.spikes['rand_selected'][:] = False
-        self.spikes['rand_selected'][random_spikes_indices1] = True
-        self.spikes['rand_selected'][random_spikes_indices2 + spike_vector1.size] = True
 
         # sort spikes by segment then sample, so that the base class bookkeeping applies
         num_seg = self.analyzer1.get_num_segments()
         self.spike_order = np.lexsort((self.spikes['sample_index'], self.spikes['segment_index']))
         self.spikes = self.spikes[self.spike_order]
+
+        # random spikes as indices into the sorted self.spikes. Sorted, so that within a unit
+        # they keep the time order of the rows of its waveforms
+        new_index_by_old = np.empty_like(self.spike_order)
+        new_index_by_old[self.spike_order] = np.arange(self.spike_order.size)
+        self.random_spikes_indices = np.sort(new_index_by_old[
+            np.concatenate([random_spikes_indices1, random_spikes_indices2 + spike_vector1.size])
+        ])
+        self._random_spikes_set = set(int(i) for i in self.random_spikes_indices)
 
         self._build_spike_indices(num_seg)
 
@@ -251,6 +254,16 @@ class ControllerComparison(Controller):
             else:
                 self.spike_amplitudes = None
 
+        if "amplitude_scalings" in self.skip_extensions:
+            self.amplitude_scalings = None
+        else:
+            as_ext1 = self.analyzer1.get_extension('amplitude_scalings')
+            as_ext2 = self.analyzer2.get_extension('amplitude_scalings')
+            if as_ext1 is not None and as_ext2 is not None:
+                self.amplitude_scalings = np.concatenate([as_ext1.get_data(), as_ext2.get_data()])[self.spike_order]
+            else:
+                self.amplitude_scalings = None
+
         if "spike_locations" in self.skip_extensions:
             if self.verbose:
                 print('\tSkipping spike_locations')
@@ -265,8 +278,23 @@ class ControllerComparison(Controller):
             else:
                 self.spike_depths = None
 
-        # Correlograms, ISIs and template_similarity cannot be concatenated: always skipped
+        # Correlograms: only the ACGs of both analyzers, the cross-sorter CCGs are not relevant
         self.correlograms, self.correlograms_bins = None, None
+        if "correlograms" in self.skip_extensions:
+            if self.verbose:
+                print('\tSkipping correlograms')
+        else:
+            if verbose:
+                print('\tLoading correlograms')
+            ccg_ext1 = self.analyzer1.get_extension('correlograms')
+            ccg_ext2 = self.analyzer2.get_extension('correlograms')
+            if ccg_ext1 is not None and ccg_ext2 is not None:
+                ccg1, bins1 = ccg_ext1.get_data()
+                ccg2, bins2 = ccg_ext2.get_data()
+                if np.array_equal(bins1, bins2):
+                    self._set_correlograms_from_acgs(ccg1, ccg2, bins1)
+
+        # ISIs and template_similarity cannot be concatenated: always skipped
         self.isi_histograms, self.isi_bins = None, None
         self._similarity_by_method = {}
 
@@ -500,6 +528,59 @@ class ControllerComparison(Controller):
 
         return dict(matched=matched, only1=only1, only2=only2)
 
+    def get_spike_venn(self, unit_id1, unit_id2):
+        """
+        Split the spikes of a pair of units (one per analyzer) in the 3 regions of a Venn diagram.
+
+        Two spikes match when they are within the `delta_frames` of the comparison.
+        Returns a dict of absolute indices into `self.spikes`:
+          * "matched1" / "matched2" : the matched spikes, seen from unit_id1 / unit_id2
+          * "only1" / "only2" : the spikes found only by unit_id1 / unit_id2
+        """
+        from spikeinterface.comparison.comparisontools import make_matching_events
+
+        matched1, matched2, only1, only2 = [], [], [], []
+        for segment_index in range(self.num_segments):
+            inds1 = self.get_spike_indices(unit_id1, segment_index=segment_index)
+            inds2 = self.get_spike_indices(unit_id2, segment_index=segment_index)
+            events = make_matching_events(
+                self.spikes['sample_index'][inds1], self.spikes['sample_index'][inds2], self.comp.delta_frames
+            )
+            # a spike can be in several matching events, keep each spike once (like the agreement count)
+            _, first = np.unique(events['index1'], return_index=True)
+            events = events[first]
+            _, first = np.unique(events['index2'], return_index=True)
+            events = events[first]
+            mask1 = np.zeros(inds1.size, dtype=bool)
+            mask1[events['index1']] = True
+            mask2 = np.zeros(inds2.size, dtype=bool)
+            mask2[events['index2']] = True
+            matched1.append(inds1[events['index1']])
+            matched2.append(inds2[events['index2']])
+            only1.append(inds1[~mask1])
+            only2.append(inds2[~mask2])
+
+        return {
+            key: np.sort(np.concatenate(value)).astype('int64')
+            for key, value in dict(matched1=matched1, matched2=matched2, only1=only1, only2=only2).items()
+        }
+
+    def get_waveforms_for_spikes(self, unit_id, spike_inds):
+        """
+        Waveforms of some spikes of one unit, given as absolute indices into `self.spikes`.
+
+        Waveforms only exist for the random_spikes subset, so the other spikes are dropped.
+        Returns (wfs, chan_inds, kept_spike_inds), or None without the waveforms extension.
+        """
+        if self.waveforms_ext1 is None:
+            return None
+        unit_inds = self.get_spike_indices(unit_id)
+        # the random spikes of the unit, in the same order as the rows of its waveforms
+        random_inds = unit_inds[np.isin(unit_inds, self.random_spikes_indices)]
+        kept = np.asarray(spike_inds)[np.isin(spike_inds, random_inds)]
+        wfs, chan_inds = self.get_waveforms(unit_id)
+        return wfs[np.searchsorted(random_inds, kept)], chan_inds, kept
+
     ## overrides of the single analyzer behavior ##
 
     def has_extension(self, extension_name):
@@ -507,6 +588,9 @@ class ControllerComparison(Controller):
             return self.use_recordings
         elif extension_name == 'comparison':
             return True
+        elif extension_name == 'correlograms':
+            # the ACGs can always be computed from both analyzers
+            return "correlograms" not in self.skip_extensions
         else:
             return Controller.has_extension(self, extension_name)
 
@@ -555,7 +639,7 @@ class ControllerComparison(Controller):
     def get_upsampled_templates(self, unit_id):
         # same 3-tuple contract as the base class, without the upsampled part
         unit_index = list(self.unit_ids).index(unit_id)
-        chan_ind = self.get_extremum_channel(unit_id)
+        chan_ind = self.get_main_channel(unit_id)
         template = self.templates_average[unit_index, :, chan_ind]
         return template, None, None
 
@@ -571,8 +655,26 @@ class ControllerComparison(Controller):
     def compute_similarity(self, method='l1'):
         raise NotImplementedError("template_similarity cannot be computed in comparison mode")
 
+    def _set_correlograms_from_acgs(self, ccg1, ccg2, bins):
+        """Combined correlograms with only the ACGs filled in, the off-diagonal is left to zeros"""
+        num_units1 = self._num_units1
+        num_units = self.unit_ids.size
+        ccg1, ccg2 = np.asarray(ccg1), np.asarray(ccg2)
+        self.correlograms = np.zeros((num_units, num_units, ccg1.shape[2]), dtype=ccg1.dtype)
+        inds1 = np.arange(num_units1)
+        inds2 = np.arange(num_units - num_units1)
+        self.correlograms[inds1, inds1] = ccg1[inds1, inds1]
+        self.correlograms[inds2 + num_units1, inds2 + num_units1] = ccg2[inds2, inds2]
+        self.correlograms_bins = np.asarray(bins)
+
     def compute_correlograms(self, window_ms, bin_ms):
-        raise NotImplementedError("correlograms cannot be computed in comparison mode")
+        ccgs = []
+        for analyzer in (self.analyzer1, self.analyzer2):
+            ext = analyzer.compute("correlograms", save=self.save_on_compute, window_ms=window_ms, bin_ms=bin_ms)
+            ccgs.append(ext.get_data())
+        (ccg1, bins), (ccg2, _) = ccgs
+        self._set_correlograms_from_acgs(ccg1, ccg2, bins)
+        return self.correlograms, self.correlograms_bins
 
     def compute_isi_histograms(self, window_ms, bin_ms):
         raise NotImplementedError("isi_histograms cannot be computed in comparison mode")
