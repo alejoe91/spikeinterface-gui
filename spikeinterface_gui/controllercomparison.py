@@ -117,9 +117,6 @@ class ControllerComparison(Controller):
         # computed once: unit_ids is read inside loops all over the views.
         self._make_unit_id_mappings()
 
-        # this now private and should be access using function
-        self._visible_unit_ids = [self.unit_ids[0]]
-
         # sparsity1
         if self.analyzer1.sparsity is None:
             self.external_sparsity1 = compute_sparsity(self.analyzer1, method="radius", radius_um=90.)
@@ -147,6 +144,9 @@ class ControllerComparison(Controller):
         self._agreement_threshold = self.comp.match_score
         self._matching_cache = {}
         self._ordered_agreement_scores = None
+
+        # this now private and should be access using function
+        self._visible_unit_ids = self._get_best_matched_pair()
 
         # spikes
         t0 = time.perf_counter()
@@ -473,6 +473,23 @@ class ControllerComparison(Controller):
         if threshold not in self._matching_cache:
             self._matching_cache[threshold] = make_hungarian_match(self.comp.agreement_scores, threshold)
         return self._matching_cache[threshold]
+
+    def _get_best_matched_pair(self):
+        """The best matched pair (the first row of the comparison unit list), else the first unit"""
+        matching_12, _ = self.get_matching()
+        scores = self.get_agreement_scores()
+        best_pair, best_score = [self.unit_ids[0]], -1.
+        for original_unit_id1, original_unit_id2 in matching_12.items():
+            if self.is_unmatched(original_unit_id2):
+                continue
+            score = scores.at[original_unit_id1, original_unit_id2]
+            if score > best_score:
+                best_score = score
+                best_pair = [
+                    self.get_combined_unit_id(1, original_unit_id1),
+                    self.get_combined_unit_id(2, original_unit_id2),
+                ]
+        return best_pair
 
     def get_best_matching(self, threshold=None):
         """

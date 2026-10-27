@@ -169,12 +169,16 @@ class CompareUnitListView(ViewBase):
                 item = self.table.item(row_idx, col)
                 if item is not None and item.unit_id is not None:
                     row_unit_ids.add(item.unit_id)
-            if len(row_unit_ids) > 0 and row_unit_ids <= visible_unit_ids:
+            if row_unit_ids == visible_unit_ids:
                 self.table.blockSignals(True)
                 self.table.selectRow(row_idx)
                 self.table.blockSignals(False)
                 self.table.scrollToItem(self.table.item(row_idx, 0))
                 return
+        # the visible units are not one row (e.g. a non matched pair): highlight nothing
+        self.table.blockSignals(True)
+        self.table.clearSelection()
+        self.table.blockSignals(False)
 
     def _qt_on_unit_visibility_changed(self):
         self._qt_select_visible_row()
@@ -282,10 +286,13 @@ class CompareUnitListView(ViewBase):
             row_unit_ids = {
                 unit_id for unit_id in (row['_unit_id1'], row['_unit_id2']) if unit_id is not None
             }
-            if len(row_unit_ids) > 0 and row_unit_ids <= visible_unit_ids:
+            if row_unit_ids == visible_unit_ids:
                 if self.table.selection != [row_index]:
                     self.table.selection = [row_index]
                 return
+        # the visible units are not one row (e.g. a non matched pair): highlight nothing
+        if self.table.selection != []:
+            self.table.selection = []
 
 
 CompareUnitListView._gui_help_txt = """

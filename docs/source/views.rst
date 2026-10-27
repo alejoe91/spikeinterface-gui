@@ -274,6 +274,14 @@ Correlograms View
 
 This view shows the auto-correlograms and cross-correlograms of the selected units.
 
+Settings
+~~~~~~~~
+- **window_ms** / **bin_ms** : the correlogram window and bin size (needs a re-compute).
+- **display_axis** : show the axes of each plot.
+- **show_cross_correlograms** : show the cross-correlograms (upper triangle), or only the
+auto-correlograms side by side. In comparison mode only the auto-correlograms of both
+sorters are available, so this is off by default.
+
 Screenshots
 ~~~~~~~~~~~
 
@@ -614,5 +622,113 @@ Screenshots
    * - .. image:: images/views/desktop/venn.png
           :width: 100%
      - .. image:: images/views/web/venn.png
+          :width: 100%
+
+Compare Spikes View
+-------------------
+
+Spike level comparison of one pair of units, one unit of each sorter. Select a row of the
+comparison unit table with two units: the comparison is computed automatically.
+
+The Venn diagram shows the spikes found by both units (matched, within the comparison
+`delta_time`), and the spikes found by only one of them. The areas are proportional to the
+spike counts.
+
+When the waveforms extension is loaded, sample waveforms of the 3 regions are plotted below,
+on the extremum channel of the unit of sorter 1: sorter 1 only (left), both (middle) and
+sorter 2 only (right), with the colors of the Venn diagram.
+Waveforms only exist for the `random_spikes` subset, so only those spikes are plotted. The
+titles tell how many of the region's spikes have waveforms.
+
+Controls
+~~~~~~~~
+- **left click on a region** : select the spikes of that region (they show up in the spike
+list and trace views).
+
+Settings
+~~~~~~~~
+- **max_waveforms** : the maximum number of waveforms plotted per unit and region.
+
+Screenshots
+~~~~~~~~~~~
+
+.. list-table::
+   :widths: 50 50
+   :header-rows: 1
+
+   * - Desktop (Qt)
+     - Web (Panel)
+   * - .. image:: images/views/desktop/comparespikes.png
+          :width: 100%
+     - .. image:: images/views/web/comparespikes.png
+          :width: 100%
+
+Compare Labels View
+-------------------
+
+Proportions of a categorical unit property (e.g. a quality label: SUA / MUA / noise) for the
+two compared sorting outputs, as one donut chart per sorter. The total number of units is in
+the middle of each donut.
+
+Only the non numeric properties that are set for both analyzers are listed. Units with no
+value are counted as "n/a".
+
+Controls
+~~~~~~~~
+- **property** : the categorical property to display.
+
+Settings
+~~~~~~~~
+- **max_categories** : properties with more distinct values than this are not listed.
+
+Screenshots
+~~~~~~~~~~~
+
+.. list-table::
+   :widths: 50 50
+   :header-rows: 1
+
+   * - Desktop (Qt)
+     - Web (Panel)
+   * - .. image:: images/views/desktop/comparelabels.png
+          :width: 100%
+     - .. image:: images/views/web/comparelabels.png
+          :width: 100%
+
+Compare Metrics View
+--------------------
+
+Scatter plots of unit metrics for the matched pairs: the value of the unit of sorter 1 on the
+horizontal axis, the value of the unit of sorter 2 on the vertical axis. The dashed line marks
+equality.
+
+The pairs are the ones matched at the agreement threshold shared with the Venn view (set it
+with the slider of the Venn view). The visible pair is drawn bigger, with a white outline.
+
+Controls
+~~~~~~~~
+- **metrics** : the metrics to plot, one scatter plot per metric.
+- **color by** : color the points by a categorical property (e.g. a quality label) of the
+unit of sorter 1 or of sorter 2.
+- **left click on a point** : make that pair of units visible.
+
+Settings
+~~~~~~~~
+- **log_scale** : plot log10(value + .001), useful for firing rates and ISI violations.
+- **num_columns** : the number of plots per row.
+- **max_categories** : properties with more distinct values than this are not listed in "color by".
+
+Screenshots
+~~~~~~~~~~~
+
+.. list-table::
+   :widths: 50 50
+   :header-rows: 1
+
+   * - Desktop (Qt)
+     - Web (Panel)
+   * - .. image:: images/views/desktop/comparemetrics.png
+          :width: 100%
+     - .. image:: images/views/web/comparemetrics.png
           :width: 100%
 

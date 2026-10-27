@@ -329,6 +329,10 @@ class VennView(ViewBase):
         self.figure.toolbar.logo = None
         self.figure.axis.visible = False
         self.figure.grid.visible = False
+        # match_aspect only works with auto ranges: an invisible glyph on the view corners
+        # makes the auto range include the labels, setting range start/end would distort
+        self.bounds_source = ColumnDataSource({"x": [], "y": []})
+        self.figure.scatter(x="x", y="y", source=self.bounds_source, alpha=0)
 
         # one entry per circle, updated in place on refresh
         self.circle_source = ColumnDataSource({"xs": [], "ys": [], "color": []})
@@ -391,8 +395,7 @@ class VennView(ViewBase):
         })
 
         x_range, y_range = self.get_view_ranges(geometry)
-        self.figure.x_range.start, self.figure.x_range.end = x_range
-        self.figure.y_range.start, self.figure.y_range.end = y_range
+        self.bounds_source.data.update({"x": list(x_range), "y": list(y_range)})
 
 
 VennView._gui_help_txt = """

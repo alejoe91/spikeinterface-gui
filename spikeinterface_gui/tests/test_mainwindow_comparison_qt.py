@@ -28,6 +28,11 @@ def test_mainwindow_comparison(start_app=False, verbose=True):
     print(analyzer1)
     print(analyzer2)
 
+    labels_analyzer1 = ["good"] * (len(analyzer1.unit_ids) - 10) + ["noise"] * 10
+    analyzer1.set_sorting_property("label", labels_analyzer1)
+    labels_analyzer2 = ["noise"] * (len(analyzer2.unit_ids) - 10) + ["good"] * 10
+    analyzer2.set_sorting_property("label", labels_analyzer2)
+
     win = run_mainwindow_comparison(
         analyzer1,
         analyzer2,

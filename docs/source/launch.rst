@@ -128,18 +128,30 @@ views (probe, waveforms, traces, amplitudes, ...) can display units of both sort
 side. Unit ids are made unique across the two: integer ids are offset, and other ids get the
 analyzer name as a suffix (``5_kilosort4``).
 
-On top of that, ``spikeinterface.comparison.compare_two_sorters`` is run and three dedicated
+On top of that, ``spikeinterface.comparison.compare_two_sorters`` is run and dedicated
 views are available:
 
-* the **compare unit list** replaces the usual unit list, with one row per pair of matched
-  units and one row per unit found by only one of the two sorters,
-* the **agreement matrix** shows the agreement score of every pair of units, and clicking a
-  cell selects that pair,
+* the **compare unit list**, with one row per pair of matched units and one row per unit
+  found by only one of the two sorters. The GUI starts with its first row (the best match)
+  visible. The usual **unit list** is still available next to it, to see units of both
+  sorters individually,
+* the **agreement matrix** shows the agreement score of every pair of units. Clicking a
+  cell makes that pair visible: a matched pair is highlighted in the compare unit list,
+  any other pair in the unit list,
 * the **venn** view summarizes how many units are matched and how many are specific to each
-  sorter, with a slider for the agreement threshold.
+  sorter, with a slider for the agreement threshold,
+* the **compare spikes** view splits the spikes of the visible pair in matched spikes and
+  spikes found by only one of the two units, which helps spotting over-merges and
+  over-splits. When the ``waveforms`` extension is available, sample waveforms of the 3
+  groups are plotted,
+* the **compare labels** view shows the proportions of a categorical unit property (e.g. a
+  quality label) for each sorter, as donut charts,
+* the **compare metrics** view plots a unit metric of sorter 1 against the same metric of
+  sorter 2, for all the matched pairs.
 
 That agreement threshold is shared: moving the slider of the venn view also re-orders the
-agreement matrix and re-categorizes the rows of the compare unit list.
+agreement matrix, re-categorizes the rows of the compare unit list and updates the pairs of
+the compare metrics view.
 
 Both modes are supported, so the comparison can also be served as a web app:
 

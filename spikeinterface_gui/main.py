@@ -397,9 +397,11 @@ def run_mainwindow_comparison(
     # a user given preset/layout can still hold views that cannot work in comparison mode,
     # so filter them out whatever the layout. get_layout_description returns a copy, so
     # this does not touch the shared presets.
+    # a layout made for a single analyzer gets the comparison unit list in place of the unit list
+    has_compareunitlist = any('compareunitlist' in views_in_zone for views_in_zone in layout_dict.values())
     for zone, views_in_zone in layout_dict.items():
         views_in_zone = [
-            'compareunitlist' if view_name == 'unitlist' else view_name
+            'compareunitlist' if view_name == 'unitlist' and not has_compareunitlist else view_name
             for view_name in views_in_zone
             if view_name not in _comparison_incompatible_views
         ]

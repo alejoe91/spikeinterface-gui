@@ -26,6 +26,8 @@ from .compareunitlistview import CompareUnitListView
 from .agreementmatrixview import AgreementMatrixView
 from .vennview import VennView
 from .comparespikesview import CompareSpikesView
+from .comparelabelsview import CompareLabelsView
+from .comparemetricsview import CompareMetricsView
 
 # probe and mainsettings view are first, since they affect other views (e.g., time info)
 builtin_views = [
@@ -35,6 +37,7 @@ builtin_views = [
     SpikeDepthView, SpikeRateView, CurationView, MetricsView, SpikeListView,
     AmplitudeScalingsView, MainTemplateView, EventView,
     CompareUnitListView, AgreementMatrixView, VennView, CompareSpikesView,
+    CompareLabelsView, CompareMetricsView,
 ]
 
 def get_all_possible_views():

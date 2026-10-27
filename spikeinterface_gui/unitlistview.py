@@ -185,7 +185,10 @@ class UnitListView(ViewBase):
         self.table.clearSelection()
         for unit_id in visible_unit_ids:
             row = unit_ids_list.index(unit_id)
-            self.table.selectRow(row)
+            # selectRow would replace the selection in ExtendedSelection mode, keeping only the last unit
+            self.table.selectionModel().select(
+                self.table.model().index(row, 0), QT.QItemSelectionModel.Select | QT.QItemSelectionModel.Rows
+            )
 
         self._qt_refresh_color_icons()
 
