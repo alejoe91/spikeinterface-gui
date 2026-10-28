@@ -193,8 +193,8 @@ class CompareMetricsView(ViewBase):
         self.legend_pane = pn.pane.HTML("")
 
         self.layout = pn.Column(
-            pn.Row(self.metrics_select, self.color_select, sizing_mode="stretch_width"),
-            self.legend_pane,
+            self.metrics_select, 
+            pn.Row(self.color_select, self.legend_pane, sizing_mode="stretch_width"),
             pn.Column(sizing_mode="stretch_both"),
             sizing_mode="stretch_both",
         )
