@@ -30,7 +30,6 @@ _default_main_settings = dict(
     split_new_id_strategy = 'append',
     num_colors=20,
 )
-
         
 
 

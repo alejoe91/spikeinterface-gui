@@ -20,9 +20,9 @@ def get_categorical_properties(controller, max_categories):
     return properties
 
 
-def get_category_colors(categories):
+def get_category_colors(categories, cmap="tab10"):
     """One hex color per category, in the order given"""
-    cmap = plt.get_cmap('tab10' if len(categories) <= 10 else 'tab20')
+    cmap = plt.get_cmap(cmap)
     return [matplotlib.colors.rgb2hex(cmap(i % cmap.N)) for i in range(len(categories))]
 
 
@@ -56,7 +56,7 @@ class CompareLabelsView(ViewBase):
             self.controller.units_table[property_name].notna(), "n/a"
         ).astype(str)
         categories = sorted(column.unique())
-        colors = get_category_colors(categories)
+        colors = get_category_colors(categories, cmap=self.controller.main_settings['label_colormap'])
         counts = np.array([
             [np.sum(column.loc[unit_ids] == category) for category in categories]
             for unit_ids in (self.controller.unit_ids1, self.controller.unit_ids2)

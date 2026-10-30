@@ -273,8 +273,8 @@ class PanelMainWindow:
 
             tabs = [("📊", view.layout)]
             if view_class._settings is not None:
-                settings_param = pn.Param(view.settings._parameterized, sizing_mode="stretch_height",
-                                    name=f"{view_name.capitalize()} settings")
+                # natural height (no stretch_height): the scrolling column below scrolls it
+                settings_param = pn.Param(view.settings._parameterized, name=f"{view_name.capitalize()} settings")
                 view._panel_settings_widget = settings_param
                 if view_class._need_compute:
                     compute_button = pn.widgets.Button(name="Compute", button_type="primary")
@@ -282,6 +282,9 @@ class PanelMainWindow:
                     settings = pn.Row(settings_param, compute_button)
                 else:
                     settings = settings_param
+                # scroll inside the tab: long settings would otherwise overflow the zone, over
+                # the tabs of the zone
+                settings = pn.Column(settings, scroll=True, sizing_mode="stretch_both")
                 tabs.append(("⚙️", settings))
 
             tabs.append(("ℹ️", info))

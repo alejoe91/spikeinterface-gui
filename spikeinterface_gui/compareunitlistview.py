@@ -243,16 +243,20 @@ class CompareUnitListView(ViewBase):
 
         pn.extension("tabulator")
 
-        self.shared_columns_select = pn.widgets.MultiChoice(
-            name="shared columns", options=list(self.shared_columns_dict.keys()), value=[],
-            sizing_mode="stretch_width",
+        from .utils_panel import make_toggled_checkboxes
+
+        self.shared_columns_toggle, self.shared_columns_select, shared_columns_box = make_toggled_checkboxes(
+            "columns",
+            options=list(self.shared_columns_dict.keys()),
+            value=self.get_shared_columns(),
+            on_change=self._panel_on_shared_columns_changed,
         )
-        self.shared_columns_select.param.watch(self._panel_on_shared_columns_changed, 'value')
 
         self._panel_create_table()
 
         self.layout = pn.Column(
-            self.shared_columns_select,
+            self.shared_columns_toggle,
+            shared_columns_box,
             self.table,
             sizing_mode="stretch_both",
         )

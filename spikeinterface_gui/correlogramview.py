@@ -51,6 +51,13 @@ class CorrelogramView(ViewBase):
             return range(r, n)
         return range(r, r + 1)
 
+    def get_acg_ymax(self, visible_unit_ids):
+        """The y max shared by the auto-correlograms of the visible units, so that they compare"""
+        unit_ids = list(self.controller.unit_ids)
+        inds = [unit_ids.index(unit_id) for unit_id in visible_unit_ids]
+        ymax = max((self.ccg[i, i, :].max() for i in inds), default=0)
+        return float(ymax) * 1.05 if ymax > 0 else 1.
+
     def _compute(self):
         self.ccg, self.bins = self.controller.compute_correlograms(
             self.settings['window_ms'],  self.settings['bin_ms']
@@ -99,6 +106,7 @@ class CorrelogramView(ViewBase):
         }
         ccg = self.ccg
         bins = self.bins
+        acg_plots = []
         
         for r in range(n):
             for c in self._get_columns(r, n):
@@ -138,11 +146,20 @@ class CorrelogramView(ViewBase):
                     if len(self.figure_cache) >= self.max_cache_size:
                         self.figure_cache.pop(next(iter(self.figure_cache)))
                     self.figure_cache[(unit_id1, unit_id2)] = plot
+                if r == c:
+                    acg_plots.append(plot)
                 if self.settings['show_cross_correlograms']:
                     self.grid.addItem(plot, row=r, col=c)
                 else:
                     # only ACGs: side by side on one row
                     self.grid.addItem(plot, row=0, col=r)
+
+        # the ACGs share the y axis (also when zooming), the plots can come from the cache
+        # with a link to a plot that is not shown anymore
+        ymax = self.get_acg_ymax(visible_unit_ids) if len(acg_plots) > 0 else None
+        for i, plot in enumerate(acg_plots):
+            plot.setYLink(None if i == 0 else acg_plots[0])
+            plot.setYRange(0, ymax, padding=0)
     
     ## panel ##
     def _panel_make_layout(self):
@@ -182,6 +199,7 @@ class CorrelogramView(ViewBase):
         ccg = self.ccg
         bins = self.bins
         figures = []
+        acg_figs = []
         first_fig = None
         for r in range(n):
             row_plots = []
@@ -249,6 +267,8 @@ class CorrelogramView(ViewBase):
                     if len(self.figure_cache) >= self.max_cache_size:
                         self.figure_cache.pop(next(iter(self.figure_cache)))
                     self.figure_cache[(unit1, unit2)] = fig
+                if r == c:
+                    acg_figs.append(fig)
                 row_plots.append(fig)
             if self.settings['show_cross_correlograms']:
                 # Fill row with None for proper spacing
@@ -259,6 +279,12 @@ class CorrelogramView(ViewBase):
                 if len(figures) == 0:
                     figures.append([])
                 figures[0].extend(row_plots)
+
+        # the ACGs share the y axis (also when zooming), the figures can come from the cache
+        from bokeh.models import Range1d
+        acg_y_range = Range1d(0, self.get_acg_ymax(visible_unit_ids))
+        for fig in acg_figs:
+            fig.y_range = acg_y_range
 
         grid = gridplot(figures, toolbar_location="right", sizing_mode="stretch_both")
         grid.toolbar.logo = None
@@ -277,6 +303,8 @@ This view shows the auto-correlograms and cross-correlograms of the selected uni
 ### Settings
 - **window_ms** / **bin_ms** : the correlogram window and bin size (needs a re-compute).
 - **display_axis** : show the axes of each plot.
+
+The auto-correlograms share the y axis, so that the firing of the units can be compared.
 - **show_cross_correlograms** : show the cross-correlograms (upper triangle), or only the
   auto-correlograms side by side. In comparison mode only the auto-correlograms of both
   sorters are available, so this is off by default.

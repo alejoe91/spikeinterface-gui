@@ -1,9 +1,9 @@
 import numpy as np
 
-from .unitvennview import UnitVennView, solve_venn_geometry
+from .compareunitvennview import CompareUnitVennView, solve_venn_geometry
 
 
-class CompareSpikesView(UnitVennView):
+class CompareSpikesView(CompareUnitVennView):
     """
     Venn diagram of the spikes of one pair of units (one per sorter): spikes found by both,
     and spikes found by only one of the two. Clicking a region selects its spikes.
@@ -22,7 +22,7 @@ class CompareSpikesView(UnitVennView):
         # the spike venn of the visible pair, recomputed when the pair changes (it is cheap)
         self._compared_pair = None
         self._spike_venn = None
-        UnitVennView.__init__(self, controller=controller, parent=parent, backend=backend)
+        CompareUnitVennView.__init__(self, controller=controller, parent=parent, backend=backend)
 
     def has_waveforms(self):
         return self.controller.waveforms_ext is not None

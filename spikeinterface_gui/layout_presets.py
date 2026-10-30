@@ -119,6 +119,6 @@ comparison_layout = dict(
     zone5=['probe'],
     zone6=['unitvenn', 'comparelabels', 'agreementmatrix'],
     zone7=['waveform', 'waveformheatmap'],
-    zone8=['correlogram', 'comparemetrics', 'maintemplate', 'mainsettings'],
+    zone8=['correlogram', 'comparemetrics', 'maintemplate', 'comparemainsettings'],
 )
 _presets['comparison'] = comparison_layout

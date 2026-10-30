@@ -24,7 +24,8 @@ from .eventview import EventView
 
 from .compareunitlistview import CompareUnitListView
 from .agreementmatrixview import AgreementMatrixView
-from .unitvennview import UnitVennView
+from .comparemainsettingsview import CompareMainSettingsView
+from .compareunitvennview import CompareUnitVennView
 from .comparespikesview import CompareSpikesView
 from .comparelabelsview import CompareLabelsView
 from .comparemetricsview import CompareMetricsView
@@ -36,7 +37,7 @@ builtin_views = [
     CorrelogramView, NDScatterView, SimilarityView, SpikeAmplitudeView,
     SpikeDepthView, SpikeRateView, CurationView, MetricsView, SpikeListView,
     AmplitudeScalingsView, MainTemplateView, EventView,
-    CompareUnitListView, AgreementMatrixView, UnitVennView, CompareSpikesView,
+    CompareMainSettingsView, CompareUnitListView, AgreementMatrixView, CompareUnitVennView, CompareSpikesView,
     CompareLabelsView, CompareMetricsView,
 ]
 

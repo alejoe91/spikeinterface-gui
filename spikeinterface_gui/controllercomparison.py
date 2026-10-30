@@ -12,8 +12,17 @@ from spikeinterface.widgets.sorting_summary import _default_displayed_unit_prope
 
 from spikeinterface.core.base import minimum_spike_dtype
 
-from .controller import Controller, _default_main_settings
+from .controller import Controller
 
+
+_default_main_settings = dict(
+    max_visible_units=10,
+    label_colormap='Set1',
+    use_times=False,
+    num_colors=20,
+    # unused
+    color_mode='color_by_unit'
+)
 
 # extensions that cannot be shared/concatenated between the two analyzers
 # correlograms are not concatenated either, only their diagonal (the ACGs) is used
@@ -38,7 +47,7 @@ class ControllerComparison(Controller):
 
     def __init__(
         self, analyzer1=None, analyzer2=None,
-        analyzer1_name="1", analyzer2_name="2", match_score=0.5,
+        analyzer1_name="1", analyzer2_name="2", comparison=None, match_score=0.5,
         backend="qt", parent=None, verbose=False, with_traces=True,
         displayed_unit_properties=None,
         extra_unit_properties=None, skip_extensions=None, disable_save_settings_button=False,
@@ -132,14 +141,26 @@ class ControllerComparison(Controller):
             self.external_sparsity2 = None
             self.analyzer_sparsity2 = self.analyzer2.sparsity
 
-        if verbose:
-            print("Comparing spike sorting outputs")
-        t0 = time.perf_counter()
-        self.comp = compare_two_sorters(self.analyzer1.sorting, self.analyzer2.sorting,
-                                        sorting1_name=self.analyzer1_name, sorting2_name=self.analyzer2_name,
-                                        match_score=match_score)
-        if verbose:
-            print("Comparing took", time.perf_counter() - t0)
+        if comparison is not None:
+            # check that the comparison object matches the analyzers in terms of unit_ids
+            if set(comparison.sorting1.unit_ids) != set(self.analyzer1.sorting.unit_ids):
+                raise ValueError("Comparison object does not match analyzer1 unit_ids")
+            if set(comparison.sorting2.unit_ids) != set(self.analyzer2.sorting.unit_ids):
+                raise ValueError("Comparison object does not match analyzer2 unit_ids")
+            self.comp = comparison
+        else:
+            if verbose:
+                print("Comparing spike sorting outputs")
+            t0 = time.perf_counter()
+            self.comp = compare_two_sorters(
+                self.analyzer1.sorting,
+                self.analyzer2.sorting,
+                sorting1_name=self.analyzer1_name,
+                sorting2_name=self.analyzer2_name,
+                match_score=match_score
+            )
+            if verbose:
+                print("Comparing took", time.perf_counter() - t0)
         # agreement threshold shared by all the comparison views
         self._agreement_threshold = self.comp.match_score
         self._matching_cache = {}
@@ -362,8 +383,9 @@ class ControllerComparison(Controller):
         self._traces_cached = {}
 
         unit_tables = []
-        for analyzer in [self.analyzer1, self.analyzer2]:
+        for analyzer, sorter in zip([self.analyzer1, self.analyzer2], [self.analyzer1_name, self.analyzer2_name]):
             unit_table = make_units_table_from_analyzer(analyzer)
+            unit_table.loc[:, "sorter"] = sorter
             unit_tables.append(unit_table)
         self.units_table = pd.concat(unit_tables, ignore_index=True)
         self.units_table.index = self.unit_ids
@@ -389,13 +411,13 @@ class ControllerComparison(Controller):
         unit_ids2 = np.asarray(self.analyzer2.unit_ids)
         self._num_units1 = unit_ids1.size
 
-        if unit_ids1.dtype.kind == "i" and unit_ids2.dtype.kind == "i":
-            self._unit_ids = np.concatenate((unit_ids1, unit_ids2 + max(unit_ids1) + 1))
-        else:
-            self._unit_ids = np.array(
-                [f"{unit_id}_{self.analyzer1_name}" for unit_id in unit_ids1]
-                + [f"{unit_id}_{self.analyzer2_name}" for unit_id in unit_ids2]
-            )
+        # if unit_ids1.dtype.kind == "i" and unit_ids2.dtype.kind == "i":
+        #     self._unit_ids = np.concatenate((unit_ids1, unit_ids2 + max(unit_ids1) + 1))
+        # else:
+        self._unit_ids = np.array(
+            [f"{unit_id}_{self.analyzer1_name}" for unit_id in unit_ids1]
+            + [f"{unit_id}_{self.analyzer2_name}" for unit_id in unit_ids2]
+        )
 
         original_unit_ids = list(unit_ids1) + list(unit_ids2)
         analyzer_indices = [1] * unit_ids1.size + [2] * unit_ids2.size

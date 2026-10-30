@@ -52,7 +52,15 @@ class CompareMetricsView(ViewBase):
         unit_ids = [pair[analyzer_index - 1] for pair in pairs]
         values = column.loc[unit_ids].astype(object).where(column.loc[unit_ids].notna(), "n/a").astype(str)
         categories = sorted(column.astype(object).where(column.notna(), "n/a").astype(str).unique())
-        color_by_category = dict(zip(categories, get_category_colors(categories)))
+        color_by_category = dict(
+            zip(
+                categories,
+                get_category_colors(
+                    categories,
+                    cmap=self.controller.main_settings['label_colormap']
+                )
+            )
+        )
         return [color_by_category[v] for v in values], list(color_by_category.items())
 
     def get_metric_values(self, metric, pairs):
@@ -174,13 +182,14 @@ class CompareMetricsView(ViewBase):
     def _panel_make_layout(self):
         import panel as pn
 
-        self.metrics_select = pn.widgets.MultiChoice(
-            name="metrics",
-            value=self.get_visible_metrics(),
+        from .utils_panel import make_toggled_checkboxes
+
+        self.metrics_toggle, self.metrics_select, metrics_box = make_toggled_checkboxes(
+            "metrics",
             options=list(self.visible_metrics_dict.keys()),
-            sizing_mode="stretch_width",
+            value=self.get_visible_metrics(),
+            on_change=self._panel_on_metrics_changed,
         )
-        self.metrics_select.param.watch(self._panel_on_metrics_changed, 'value')
 
         self._color_options = self.get_color_options()
         self.color_select = pn.widgets.Select(name="color by", options=list(self._color_options.keys()), value='none')
@@ -188,8 +197,8 @@ class CompareMetricsView(ViewBase):
         self.legend_pane = pn.pane.HTML("")
 
         self.layout = pn.Column(
-            self.metrics_select, 
-            pn.Row(self.color_select, self.legend_pane, sizing_mode="stretch_width"),
+            pn.Row(self.metrics_toggle, self.color_select, self.legend_pane, sizing_mode="stretch_width"),
+            metrics_box,
             pn.Column(sizing_mode="stretch_both"),
             sizing_mode="stretch_both",
         )

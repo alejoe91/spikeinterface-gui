@@ -59,7 +59,7 @@ def _solve_center_distance(radius1, radius2, target_area):
     return brentq(lambda d: _lens_area(d, radius1, radius2) - target_area, low, high)
 
 
-class UnitVennView(ViewBase):
+class CompareUnitVennView(ViewBase):
     """
     Venn diagram of the two compared sortings: units matched by both, and units found
     by only one of the two. The agreement threshold is set with a slider and is shared
@@ -517,7 +517,7 @@ class UnitVennView(ViewBase):
         self.bounds_source.data.update({"x": list(x_range), "y": list(y_range)})
 
 
-UnitVennView._gui_help_txt = """
+CompareUnitVennView._gui_help_txt = """
 ## Unit Venn View
 
 Venn diagram of the two compared sorting outputs. The area of each disc is proportional to

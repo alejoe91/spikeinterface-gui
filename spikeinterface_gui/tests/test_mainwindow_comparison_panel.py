@@ -49,6 +49,8 @@ def test_mainwindow_comparison(start_app=False, verbose=True, port=0):
 
 parser = ArgumentParser()
 parser.add_argument('--dataset', default="small", help='Path to the dataset folder')
+parser.add_argument('--port', default=0, type=int, help='Port for the web server')
+parser.add_argument('--no-start', action="store_true", help='Do not start the app')
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -58,7 +60,7 @@ if __name__ == '__main__':
     if not test_folder.is_dir():
         setup_module()
 
-    win = test_mainwindow_comparison(start_app=True, verbose=True, port=0)
+    win = test_mainwindow_comparison(start_app=not args.no_start, verbose=True, port=args.port)
 
 # TO RUN with panel serve:
 # win = test_mainwindow_comparison(start_app=False, verbose=True)
