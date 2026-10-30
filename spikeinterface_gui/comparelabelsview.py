@@ -9,11 +9,9 @@ def get_categorical_properties(controller, max_categories):
     """The non numeric columns of the units table that are set for both analyzers"""
     table = controller.units_table
     properties = []
-    for name in table.columns:
+    for name in controller.get_shared_unit_properties():
         column = table[name]
         if column.dtype.kind in 'if':
-            continue
-        if column.loc[controller.unit_ids1].isna().all() or column.loc[controller.unit_ids2].isna().all():
             continue
         # too many values (e.g. main_channel_id) do not make a readable chart
         if column.nunique() > max_categories:

@@ -81,6 +81,6 @@ if __name__ == '__main__':
     # debug_one_view('metrics')
 
     # the comparison only views
-    debug_one_view('venn', comparison=True)
+    debug_one_view('unitvenn', comparison=True)
     # debug_one_view('agreementmatrix', comparison=True)
     # debug_one_view('compareunitlist', comparison=True)

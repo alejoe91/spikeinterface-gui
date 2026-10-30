@@ -138,7 +138,7 @@ views are available:
 * the **agreement matrix** shows the agreement score of every pair of units. Clicking a
   cell makes that pair visible: a matched pair is highlighted in the compare unit list,
   any other pair in the unit list,
-* the **venn** view summarizes how many units are matched and how many are specific to each
+* the **unit venn** view summarizes how many units are matched and how many are specific to each
   sorter, with a slider for the agreement threshold,
 * the **compare spikes** view splits the spikes of the visible pair in matched spikes and
   spikes found by only one of the two units, which helps spotting over-merges and
@@ -149,7 +149,7 @@ views are available:
 * the **compare metrics** view plots a unit metric of sorter 1 against the same metric of
   sorter 2, for all the matched pairs.
 
-That agreement threshold is shared: moving the slider of the venn view also re-orders the
+That agreement threshold is shared: moving the slider of the unit venn view also re-orders the
 agreement matrix, re-categorizes the rows of the compare unit list and updates the pairs of
 the compare metrics view.
 

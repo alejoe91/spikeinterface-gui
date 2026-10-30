@@ -434,6 +434,14 @@ class ControllerComparison(Controller):
     def get_analyzer_name(self, analyzer_index):
         return self.analyzer1_name if analyzer_index == 1 else self.analyzer2_name
 
+    def get_shared_unit_properties(self):
+        """The columns of the units table that have values for units of both analyzers"""
+        table = self.units_table
+        return [
+            col for col in table.columns
+            if table.loc[self.unit_ids1, col].notna().any() and table.loc[self.unit_ids2, col].notna().any()
+        ]
+
     ## comparison zone ##
 
     @property

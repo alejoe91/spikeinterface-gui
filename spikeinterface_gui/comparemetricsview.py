@@ -11,7 +11,7 @@ _default_color = '#BBBBBB'
 class CompareMetricsView(ViewBase):
     """
     Scatter plots of unit metrics, sorter 1 against sorter 2, for the matched pairs at the
-    agreement threshold shared with the Venn view. Clicking a point makes its pair visible.
+    agreement threshold shared with the unit Venn view. Clicking a point makes its pair visible.
     """
     id = "comparemetrics"
     _supported_backend = ['qt', 'panel']
@@ -24,12 +24,7 @@ class CompareMetricsView(ViewBase):
 
     def __init__(self, controller=None, parent=None, backend="qt"):
         table = controller.units_table
-        metrics = [
-            col for col in table.columns
-            if table[col].dtype.kind in 'if'
-            and table.loc[controller.unit_ids1, col].notna().any()
-            and table.loc[controller.unit_ids2, col].notna().any()
-        ]
+        metrics = [col for col in controller.get_shared_unit_properties() if table[col].dtype.kind in 'if']
         default_metrics = [m for m in metrics if m in _default_visible_metrics] or metrics[:4]
         self.visible_metrics_dict = {m: m in default_metrics for m in metrics}
         ViewBase.__init__(self, controller=controller, parent=parent, backend=backend)
@@ -270,8 +265,8 @@ Scatter plots of unit metrics for the matched pairs: the value of the unit of so
 horizontal axis, the value of the unit of sorter 2 on the vertical axis. The dashed line marks
 equality.
 
-The pairs are the ones matched at the agreement threshold shared with the Venn view (set it
-with the slider of the Venn view). The visible pair is drawn bigger, with a white outline.
+The pairs are the ones matched at the agreement threshold shared with the unit Venn view (set it
+with the slider of the unit Venn view). The visible pair is drawn bigger, with a white outline.
 
 ### Controls
 - **metrics** : the metrics to plot, one scatter plot per metric.

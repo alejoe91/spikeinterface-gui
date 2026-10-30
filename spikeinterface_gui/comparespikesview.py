@@ -1,9 +1,9 @@
 import numpy as np
 
-from .vennview import VennView, solve_venn_geometry
+from .unitvennview import UnitVennView, solve_venn_geometry
 
 
-class CompareSpikesView(VennView):
+class CompareSpikesView(UnitVennView):
     """
     Venn diagram of the spikes of one pair of units (one per sorter): spikes found by both,
     and spikes found by only one of the two. Clicking a region selects its spikes.
@@ -22,7 +22,7 @@ class CompareSpikesView(VennView):
         # the spike venn of the visible pair, recomputed when the pair changes (it is cheap)
         self._compared_pair = None
         self._spike_venn = None
-        VennView.__init__(self, controller=controller, parent=parent, backend=backend)
+        UnitVennView.__init__(self, controller=controller, parent=parent, backend=backend)
 
     def has_waveforms(self):
         return self.controller.waveforms_ext is not None
@@ -71,8 +71,20 @@ class CompareSpikesView(VennView):
 
     def select_units_on_click(self, x, y, reset=True):
         # here a click selects the spikes of a region, not units
-        venn, geometry = self.get_venn_data()
-        region = self.get_clicked_region(x, y, geometry)
+        _, geometry = self.get_venn_data()
+        self.select_region(self.get_clicked_region(x, y, geometry))
+
+    def get_region_button_labels(self):
+        """{region: label} of the buttons that select a region, which can be too thin to click"""
+        return {
+            'only1': f'Select {self.controller.analyzer1_name}',
+            'matched': 'Select match',
+            'only2': f'Select {self.controller.analyzer2_name}',
+        }
+
+    def select_region(self, region):
+        """Select the spikes of a region: 'only1', 'matched' or 'only2'"""
+        venn, _ = self.get_venn_data()
         if region is None or len(venn[region]) == 0:
             return
         spike_inds_by_unit = self.get_region_spikes(region)
@@ -94,13 +106,13 @@ class CompareSpikesView(VennView):
         rng = np.random.default_rng()
 
         lines = []
-        texts = []
+        num_plotted = []
         for unit_id, spike_inds in spike_inds_by_unit.items():
             result = controller.get_waveforms_for_spikes(unit_id, spike_inds)
             if result is None:
                 return None
             wfs, chan_inds, kept = result
-            texts.append(f"{unit_id}: {len(kept)}/{len(spike_inds)}")
+            num_plotted.append(len(kept))
             chan_pos = np.flatnonzero(chan_inds == channel_index)
             if len(chan_pos) == 0 or len(kept) == 0:
                 # the extremum channel is not in the sparsity of this unit
@@ -113,7 +125,13 @@ class CompareSpikesView(VennView):
 
         num_samples = controller.nbefore + controller.nafter
         times_ms = (np.arange(num_samples) - controller.nbefore) / controller.sampling_frequency * 1000.
-        return times_ms, lines, " | ".join(texts)
+        # the counts of the regions are in the Venn diagram, the title only tells how many
+        # spikes have waveforms: short, a title wider than the plot crops it in Qt
+        if len(num_plotted) == 1:
+            title = f"n={num_plotted[0]}"
+        else:
+            title = " ".join(f"n{i + 1}={n}" for i, n in enumerate(num_plotted))
+        return times_ms, lines, title
 
     def iter_waveforms_data(self):
         """(panel index, waveforms data or None) for the 3 regions"""
@@ -132,6 +150,15 @@ class CompareSpikesView(VennView):
         self.layout.addWidget(self.pair_label)
 
         self._qt_make_venn_plot()
+
+        buttons = QT.QHBoxLayout()
+        self.region_buttons = {}
+        for region, label in self.get_region_button_labels().items():
+            button = QT.QPushButton(label)
+            button.clicked.connect(lambda checked=False, region=region: self.select_region(region))
+            buttons.addWidget(button)
+            self.region_buttons[region] = button
+        self.layout.addLayout(buttons)
 
         self.waveform_plots = []
         if self.has_waveforms():
@@ -152,7 +179,10 @@ class CompareSpikesView(VennView):
             self.pair_label.setText('select a pair of units, one of each sorter')
         else:
             self.pair_label.setText(f'{pair[0]} vs {pair[1]}')
-        self._qt_draw_venn(*self.get_venn_data())
+        venn, geometry = self.get_venn_data()
+        self._qt_draw_venn(venn, geometry)
+        for region, button in self.region_buttons.items():
+            button.setEnabled(len(venn[region]) > 0)
         self._qt_draw_waveforms()
 
     def _qt_draw_waveforms(self):
@@ -173,7 +203,9 @@ class CompareSpikesView(VennView):
                 ys = np.hstack([wfs, np.full((wfs.shape[0], 1), np.nan)]).ravel()
                 curve = pg.PlotCurveItem(xs, ys, connect='finite', pen=pg.mkPen(qcolor, width=3 if is_mean else 1))
                 plot.addItem(curve)
-            plot.setTitle(title)
+            plot.setTitle(title, size='9pt')
+            # a zoom on a previous pair would otherwise stick to the next ones
+            plot.enableAutoRange()
 
     ## panel ##
     def _panel_make_layout(self):
@@ -210,7 +242,13 @@ class CompareSpikesView(VennView):
                 self.waveform_figures.append(fig)
                 self.waveform_sources.append(source)
 
-        items = [self.pair_label, self.figure]
+        self.region_buttons = {}
+        for region, label in self.get_region_button_labels().items():
+            button = pn.widgets.Button(name=label, sizing_mode="stretch_width")
+            button.on_click(lambda event, region=region: self.select_region(region))
+            self.region_buttons[region] = button
+
+        items = [self.pair_label, self.figure, pn.Row(*self.region_buttons.values(), sizing_mode="stretch_width")]
         if self.has_waveforms():
             items.append(pn.Row(*self.waveform_figures, sizing_mode="stretch_both", styles={"flex": "1"}))
         self.layout = pn.Column(
@@ -223,7 +261,10 @@ class CompareSpikesView(VennView):
         self.update_spike_venn()
         pair = self._compared_pair
         self.pair_label.object = "select a pair of units, one of each sorter" if pair is None else f"{pair[0]} vs {pair[1]}"
-        self._panel_draw_venn(*self.get_venn_data())
+        venn, geometry = self.get_venn_data()
+        self._panel_draw_venn(venn, geometry)
+        for region, button in self.region_buttons.items():
+            button.disabled = len(venn[region]) == 0
         self._panel_draw_waveforms()
 
     def _panel_draw_waveforms(self):
@@ -257,11 +298,14 @@ When the waveforms extension is loaded, sample waveforms of the 3 regions are pl
 on the extremum channel of the unit of sorter 1: sorter 1 only (left), both (middle) and
 sorter 2 only (right), with the colors of the Venn diagram.
 Waveforms only exist for the `random_spikes` subset, so only those spikes are plotted. The
-titles tell how many of the region's spikes have waveforms.
+titles tell how many of the region's spikes have waveforms (`n1` and `n2` for the units of
+sorter 1 and 2 in the middle panel).
 
 ### Controls
 - **left click on a region** : select the spikes of that region (they show up in the spike
   list and trace views).
+- **Select {sorter 1} / Select match / Select {sorter 2}** : the same as clicking a region,
+  for when a region is too thin to click on.
 
 ### Settings
 - **max_waveforms** : the maximum number of waveforms plotted per unit and region.

@@ -117,7 +117,7 @@ comparison_layout = dict(
     zone3=['trace', 'tracemap', 'spikeamplitude', 'amplitudescalings', 'spikedepth', 'spikerate', 'event'],
     zone4=[],
     zone5=['probe'],
-    zone6=['venn', 'comparelabels', 'agreementmatrix'],
+    zone6=['unitvenn', 'comparelabels', 'agreementmatrix'],
     zone7=['waveform', 'waveformheatmap'],
     zone8=['correlogram', 'comparemetrics', 'maintemplate', 'mainsettings'],
 )

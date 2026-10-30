@@ -527,7 +527,7 @@ The rows are sorted by decreasing agreement score, so the best matches come firs
 units that only one sorter found (score 0) come last.
 
 The matching is done at the agreement threshold shared with the other comparison views
-(set it with the slider of the Venn view). The table is read only: there is no curation in
+(set it with the slider of the unit Venn view). The table is read only: there is no curation in
 comparison mode.
 
 Settings
@@ -539,6 +539,8 @@ appear on several rows.
 Controls
 ~~~~~~~~
 - **left click on a row** : make the units of this row visible in the other views.
+- **columns** : add unit properties that both sorters have (e.g. firing rate or a quality
+label), as one column per sorter.
 
 Screenshots
 ~~~~~~~~~~~
@@ -589,8 +591,8 @@ Screenshots
      - .. image:: images/views/web/agreementmatrix.png
           :width: 100%
 
-Venn View
----------
+Unit Venn View
+--------------
 
 Venn diagram of the two compared sorting outputs. The area of each disc is proportional to
 the number of units of that sorter, and the area of the intersection is proportional to the
@@ -603,12 +605,20 @@ agreement matrix and re-categorizes the rows of the comparison unit table.
 Controls
 ~~~~~~~~
 - **slider** : the agreement threshold above which two units are considered matched.
+- **filter** : only count the units whose categorical property (e.g. a quality label, shared
+by both sorters) is one of the checked values.
 - **left click on a region** : make one random unit of that region visible. Clicking again
 picks another one, which is a quick way to walk through a region. Clicking the
 intersection selects the two units of one matched pair, so that they can be compared.
 
 Only one unit (or one matched pair) is selected per click, so that the selection always
 matches a single row of the comparison unit table.
+
+Settings
+~~~~~~~~
+- **inclusion** : how a matched pair is counted when only one of its units passes the filter.
+"both": the pair is matched only when both units pass, otherwise the passing unit counts as
+found by its own sorter only. "any": the pair stays matched when at least one unit passes.
 
 Screenshots
 ~~~~~~~~~~~
@@ -619,9 +629,9 @@ Screenshots
 
    * - Desktop (Qt)
      - Web (Panel)
-   * - .. image:: images/views/desktop/venn.png
+   * - .. image:: images/views/desktop/unitvenn.png
           :width: 100%
-     - .. image:: images/views/web/venn.png
+     - .. image:: images/views/web/unitvenn.png
           :width: 100%
 
 Compare Spikes View
@@ -644,6 +654,8 @@ Controls
 ~~~~~~~~
 - **left click on a region** : select the spikes of that region (they show up in the spike
 list and trace views).
+- **Select {sorter 1} / Select match / Select {sorter 2}** : the same as clicking a region,
+for when a region is too thin to click on.
 
 Settings
 ~~~~~~~~
@@ -702,8 +714,8 @@ Scatter plots of unit metrics for the matched pairs: the value of the unit of so
 horizontal axis, the value of the unit of sorter 2 on the vertical axis. The dashed line marks
 equality.
 
-The pairs are the ones matched at the agreement threshold shared with the Venn view (set it
-with the slider of the Venn view). The visible pair is drawn bigger, with a white outline.
+The pairs are the ones matched at the agreement threshold shared with the unit Venn view (set it
+with the slider of the unit Venn view). The visible pair is drawn bigger, with a white outline.
 
 Controls
 ~~~~~~~~

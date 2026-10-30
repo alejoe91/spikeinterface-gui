@@ -1,6 +1,7 @@
 import numpy as np
 
 from .view_base import ViewBase
+from .comparelabelsview import get_categorical_properties
 
 
 def solve_venn_geometry(num_only1, num_matched, num_only2):
@@ -58,22 +59,69 @@ def _solve_center_distance(radius1, radius2, target_area):
     return brentq(lambda d: _lens_area(d, radius1, radius2) - target_area, low, high)
 
 
-class VennView(ViewBase):
+class UnitVennView(ViewBase):
     """
     Venn diagram of the two compared sortings: units matched by both, and units found
     by only one of the two. The agreement threshold is set with a slider and is shared
     with the other comparison views.
     """
-    id = "venn"
+    id = "unitvenn"
     _supported_backend = ['qt', 'panel']
     _depend_on = ['comparison']
+    _settings = [
+        {'name': 'inclusion', 'type': 'list', 'limits': ['both', 'any']},
+    ]
 
     _color1 = "#1f77b4"
     _color2 = "#ff7f0e"
+    _max_filter_categories = 20
+
+    # the unit filter: a categorical property and the values to keep, None for no filter
+    _filter_property = None
+    _filter_values = ()
+
+    def get_filter_properties(self):
+        return get_categorical_properties(self.controller, self._max_filter_categories)
+
+    def get_property_values(self, property_name):
+        """The values of a property as strings, indexed by unit id. Missing values are "n/a"."""
+        column = self.controller.units_table[property_name]
+        return column.astype(object).where(column.notna(), "n/a").astype(str)
+
+    def set_filter(self, property_name, values):
+        self._filter_property = property_name
+        self._filter_values = tuple(values)
+        self.refresh()
+
+    def filter_venn(self, venn):
+        """
+        Keep only the units whose filter property is one of the filter values.
+
+        With inclusion "both" a matched pair stays matched when both units pass, and a passing
+        unit whose match does not pass counts as found by its own sorter only. With "any" a
+        pair stays matched when at least one of its units passes.
+        """
+        if self._filter_property is None:
+            return venn
+        values = self.get_property_values(self._filter_property)
+        passing = set(values.index[values.isin(self._filter_values)])
+        matched = []
+        only1 = [u for u in venn['only1'] if u in passing]
+        only2 = [u for u in venn['only2'] if u in passing]
+        for unit_id1, unit_id2 in venn['matched']:
+            pass1, pass2 = unit_id1 in passing, unit_id2 in passing
+            if (pass1 and pass2) or (self.settings['inclusion'] == 'any' and (pass1 or pass2)):
+                matched.append((unit_id1, unit_id2))
+            else:
+                if pass1:
+                    only1.append(unit_id1)
+                if pass2:
+                    only2.append(unit_id2)
+        return dict(matched=matched, only1=only1, only2=only2)
 
     def get_venn_data(self):
         """Returns (venn_dict, geometry) where geometry is (r1, r2, cx1, cx2)"""
-        venn = self.controller.get_venn_unit_ids()
+        venn = self.filter_venn(self.controller.get_venn_unit_ids())
         geometry = solve_venn_geometry(len(venn['only1']), len(venn['matched']), len(venn['only2']))
         return venn, geometry
 
@@ -195,6 +243,7 @@ class VennView(ViewBase):
         self.threshold_label = QT.QLabel(f'{self.controller.agreement_threshold:.2f}')
         header.addWidget(self.threshold_label)
         self.layout.addLayout(header)
+        self._qt_make_filter()
 
         # dragging the slider emits one signal per step: debounce the re-matching so that
         # a drag does not re-run the matching and rebuild the unit table on every step
@@ -204,6 +253,50 @@ class VennView(ViewBase):
         self._commit_timer.timeout.connect(self._qt_commit_threshold)
 
         self._qt_make_venn_plot()
+
+    def _qt_make_filter(self):
+        from .myqt import QT
+
+        row = QT.QHBoxLayout()
+        row.addWidget(QT.QLabel('filter'))
+        self.filter_combo = QT.QComboBox()
+        self.filter_combo.addItems(['none'] + self.get_filter_properties())
+        self.filter_combo.currentTextChanged.connect(self._qt_on_filter_property_changed)
+        row.addWidget(self.filter_combo)
+        # the values of the property, as checkable items laid out in a row
+        self.filter_values_list = QT.QListWidget()
+        self.filter_values_list.setFlow(QT.QListView.LeftToRight)
+        self.filter_values_list.setWrapping(True)
+        self.filter_values_list.setMaximumHeight(50)
+        self.filter_values_list.itemChanged.connect(self._qt_on_filter_values_changed)
+        self.filter_values_list.hide()
+        row.addWidget(self.filter_values_list, stretch=1)
+        self.layout.addLayout(row)
+
+    def _qt_on_filter_property_changed(self, text):
+        from .myqt import QT
+
+        property_name = None if text == 'none' else text
+        values = [] if property_name is None else sorted(self.get_property_values(property_name).unique())
+        self.filter_values_list.blockSignals(True)
+        self.filter_values_list.clear()
+        for value in values:
+            item = QT.QListWidgetItem(value)
+            item.setFlags(item.flags() | QT.Qt.ItemIsUserCheckable)
+            item.setCheckState(QT.Qt.Checked)
+            self.filter_values_list.addItem(item)
+        self.filter_values_list.blockSignals(False)
+        self.filter_values_list.setVisible(property_name is not None)
+        self.set_filter(property_name, values)
+
+    def _qt_on_filter_values_changed(self, item=None):
+        from .myqt import QT
+
+        values = [
+            self.filter_values_list.item(i).text() for i in range(self.filter_values_list.count())
+            if self.filter_values_list.item(i).checkState() == QT.Qt.Checked
+        ]
+        self.set_filter(self._filter_property, values)
 
     def _qt_make_venn_plot(self):
         import pyqtgraph as pg
@@ -302,10 +395,24 @@ class VennView(ViewBase):
         )
         self.threshold_slider.param.watch(self._panel_on_slider_changed, 'value_throttled')
 
+        self.filter_select = pn.widgets.Select(
+            name='filter', options=['none'] + self.get_filter_properties(), value='none',
+            sizing_mode="stretch_width",
+        )
+        self.filter_values_select = pn.widgets.MultiChoice(
+            name='values', options=[], value=[], visible=False, sizing_mode="stretch_width",
+        )
+        self.filter_select.param.watch(self._panel_on_filter_property_changed, 'value')
+        self.filter_values_select.param.watch(
+            lambda event: self.set_filter(self._filter_property, event.new), 'value'
+        )
+
         self._panel_make_venn_figure()
 
         self.layout = pn.Column(
             self.threshold_slider,
+            self.filter_select,
+            self.filter_values_select,
             self.figure,
             styles={"display": "flex", "flex-direction": "column"},
             sizing_mode="stretch_both",
@@ -348,6 +455,18 @@ class VennView(ViewBase):
         )
 
         self.figure.on_event(Tap, self._panel_on_tap)
+
+    def _panel_on_filter_property_changed(self, event):
+        property_name = None if event.new == 'none' else event.new
+        values = [] if property_name is None else sorted(self.get_property_values(property_name).unique())
+        # set the filter before the values, so that the values watcher filters the new property
+        self._filter_property = property_name
+        self.filter_values_select.options = values
+        self.filter_values_select.visible = property_name is not None
+        if self.filter_values_select.value == values:
+            self.set_filter(property_name, values)
+        else:
+            self.filter_values_select.value = values
 
     def _panel_on_slider_changed(self, event):
         self.set_agreement_threshold(event.new)
@@ -398,8 +517,8 @@ class VennView(ViewBase):
         self.bounds_source.data.update({"x": list(x_range), "y": list(y_range)})
 
 
-VennView._gui_help_txt = """
-## Venn View
+UnitVennView._gui_help_txt = """
+## Unit Venn View
 
 Venn diagram of the two compared sorting outputs. The area of each disc is proportional to
 the number of units of that sorter, and the area of the intersection is proportional to the
@@ -411,10 +530,17 @@ agreement matrix and re-categorizes the rows of the comparison unit table.
 
 ### Controls
 - **slider** : the agreement threshold above which two units are considered matched.
+- **filter** : only count the units whose categorical property (e.g. a quality label, shared
+  by both sorters) is one of the checked values.
 - **left click on a region** : make one random unit of that region visible. Clicking again
   picks another one, which is a quick way to walk through a region. Clicking the
   intersection selects the two units of one matched pair, so that they can be compared.
 
 Only one unit (or one matched pair) is selected per click, so that the selection always
 matches a single row of the comparison unit table.
+
+### Settings
+- **inclusion** : how a matched pair is counted when only one of its units passes the filter.
+  "both": the pair is matched only when both units pass, otherwise the passing unit counts as
+  found by its own sorter only. "any": the pair stays matched when at least one unit passes.
 """
